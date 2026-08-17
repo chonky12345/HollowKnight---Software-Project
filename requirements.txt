@@ -1,0 +1,5 @@
+# Python dependencies for the Metroidvania major project.
+# Install with:  pip install -r requirements.txt
+#
+# Requires Python 3.9 or newer (developed and tested on 3.13).
+arcade==3.3.3

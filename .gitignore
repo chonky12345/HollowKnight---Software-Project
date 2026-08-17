@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor / tooling
+.vscode/
+.idea/
+.claude/
+
+# macOS
+.DS_Store
+
+# Working files that are not part of the game.
+# "Possible Assets" holds ~190 MB of unused source artwork and asset packs;
+# everything the game actually loads lives in Assets/.
+Possible Assets/
+other thing/
+*.zip
