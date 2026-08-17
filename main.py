@@ -1,12 +1,10 @@
 import arcade
 from constants import *
-from game_view import GameView
+from menu import MenuView
 
 def main():
     window = arcade.Window(960, 544, SCREEN_TITLE)
-    game_view = GameView()
-    game_view.setup()
-    window.show_view(game_view)
+    window.show_view(MenuView())
     arcade.run()
 
 if __name__ == "__main__":
