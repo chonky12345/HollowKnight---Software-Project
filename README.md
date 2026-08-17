@@ -44,12 +44,18 @@ own for testing with `python boss_main.py`.
 
 ## Documentation
 
-| Document | Contents |
+The full project documentation is kept as a Google Doc:
+
+**[Metroidvania — Project Documentation](https://docs.google.com/document/d/1vY0NbWB8U_5s6qjl2ikIlVTGlZD-LM457KXodYVdQM4/edit)**
+
+| Section | Contents |
 |---|---|
-| [User Manual](docs/USER_MANUAL.md) | Installation, controls, how to play, troubleshooting |
-| [System Specifications](docs/SYSTEM_SPECS.md) | Software and hardware requirements |
-| [Justification of Coding](docs/CODE_JUSTIFICATION.md) | Why the code is structured the way it is |
-| [Test Data](docs/TEST_DATA.md) | Test tables, results and bugs found |
+| 1. System Specifications | Software and hardware requirements |
+| 2. User Manual | Installation, controls, how to play, troubleshooting |
+| 3. Justification of Coding | Why the code is structured the way it is |
+| 4. Test Data and Testing | Test tables, results and bugs found |
+
+Screenshots used in the manual are in [docs/images](docs/images).
 
 ## Running the tests
 
