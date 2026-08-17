@@ -717,21 +717,30 @@ class GameView(arcade.View):
         )
 
     def _draw_door_prompt(self):
-        """Floating "[F] Enter/Open" hint above the player while they
-        stand at a live door or an unopened chest."""
+        """Floating "[F] Enter/Boss Fight/Open" hint above the player while
+        they stand at a live door or an unopened chest."""
+        colour = arcade.color.WHITE
         if self.active_entry is not None:
-            action = "Enter"
+            if self.active_entry["to"] == BOSS_FIGHT_KEY:
+                action = "Boss Fight"          # named, so it is not a surprise
+                colour = arcade.color.CRIMSON_GLORY
+            else:
+                action = "Enter"
         elif self.active_chest is not None:
             action = "Open"
         else:
             return
+
         p = self.player_sprite
+        label = f"[{DOOR_INTERACT_KEY}] {action}"
+        # Size the backing box to the text so longer labels still fit
+        half_w = 18 + len(label) * 4.6
         y = p.center_y + p.body_half_height + 18
         arcade.draw_lrbt_rectangle_filled(
-            p.center_x - 62, p.center_x + 62, y - 8, y + 24, (0, 0, 0, 180)
+            p.center_x - half_w, p.center_x + half_w, y - 8, y + 24,
+            (0, 0, 0, 180)
         )
-        arcade.draw_text(f"[{DOOR_INTERACT_KEY}] {action}",
-                         p.center_x, y, arcade.color.WHITE, 14,
+        arcade.draw_text(label, p.center_x, y, colour, 14,
                          anchor_x="center", bold=True)
 
     def _draw_coin_popup(self):
@@ -789,8 +798,15 @@ class GameView(arcade.View):
 
         row_h = 30
         panel_h = 110 + len(SHOP_ITEMS) * row_h
-        panel_w = 660
+        panel_w = 740
         top = cy + panel_h / 2
+        left = cx - panel_w / 2
+        # Column starts, measured from the panel's left edge. The name
+        # column has to clear the longest item name ("Sharpened Blade"),
+        # which used to run into the description text.
+        col_name = left + 25
+        col_desc = left + 235
+        col_status = cx + panel_w / 2 - 25       # right-aligned
 
         arcade.draw_lrbt_rectangle_filled(
             cx - panel_w / 2, cx + panel_w / 2,
@@ -817,13 +833,11 @@ class GameView(arcade.View):
                          else arcade.color.GRAY)
 
             slot = (i + 1) % 10
-            arcade.draw_text(f"[{slot}] {item['name']}",
-                             cx - panel_w / 2 + 25, y, color, 15)
-            arcade.draw_text(item["desc"],
-                             cx - panel_w / 2 + 185, y + 1,
+            arcade.draw_text(f"[{slot}] {item['name']}", col_name, y, color, 15)
+            arcade.draw_text(item["desc"], col_desc, y + 1,
                              arcade.color.DARK_GRAY if color == arcade.color.GRAY
                              else arcade.color.LIGHT_GRAY, 11)
-            arcade.draw_text(status, cx + panel_w / 2 - 25, y, color, 14,
+            arcade.draw_text(status, col_status, y, color, 14,
                              anchor_x="right")
 
         arcade.draw_text(
