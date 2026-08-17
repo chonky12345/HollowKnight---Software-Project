@@ -1,5 +1,7 @@
 import arcade
 
+from constants import resource_path
+
 
 # ============================================================
 # PARENT CLASS
@@ -66,6 +68,38 @@ class PlayerSpawner(Entity):
 
 
 # ============================================================
+# CHEST  (visible; no open/loot behaviour yet)
+# ============================================================
+
+class Chest(Entity):
+    WORLD_WIDTH = 96   # px the chest art is scaled to in-game
+
+    _texture = None
+
+    def __init__(self, x, y, coins=0):
+        """x, y = arcade bottom-left of the chest's 16px map cell."""
+        super().__init__("chest", x, y)
+
+        if Chest._texture is None:
+            Chest._texture = arcade.load_texture(resource_path("Assets/chest.png"))
+        self.texture = Chest._texture
+        self.scale = self.WORLD_WIDTH / Chest._texture.width
+
+        self.coins = coins
+        self.opened = False
+        # Stable id for remembering opened chests across room reloads
+        self.cell_key = (x, y)
+
+        self.center_x = x + 8   # centre of its cell
+        self.bottom = y         # resting on the cell's bottom edge
+
+    def open(self):
+        """Mark opened — darkened so it reads as already looted."""
+        self.opened = True
+        self.color = (110, 110, 110)
+
+
+# ============================================================
 # CAVE ENTRANCE  (trigger zone)
 # ============================================================
 
@@ -74,9 +108,14 @@ class CaveEntrance(Entity):
 
     _hitbox_texture = None
 
-    def __init__(self, x, y, entrance_id):
+    def __init__(self, x, y, entrance_id, door_tag=""):
         super().__init__("CaveAccess", x, y)
         self.entrance_id = entrance_id
+        # Optional per-instance "door_id" custom Value set in Ogmo Editor —
+        # lets a door be matched by name instead of by position. Empty
+        # string if the map hasn't been tagged (or the field doesn't exist
+        # in the Ogmo project yet).
+        self.door_tag = door_tag
 
         if CaveEntrance._hitbox_texture is None:
             CaveEntrance._hitbox_texture = arcade.Texture.create_empty(

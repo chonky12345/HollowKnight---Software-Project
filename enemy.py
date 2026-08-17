@@ -17,12 +17,14 @@ class Enemy(arcade.Sprite):
         self.is_attacking = False
         self.attack_timer = 0
         self.jumps_remaining = 1
-    
+        self.hit_flash_timer = 0   # frames of red flash after taking a hit
+
     def update_animation(self, delta_time: float = 1/60):
         # Handle sprite animations based on state
         pass
-    
+
     def take_damage(self, amount):
+        self.hit_flash_timer = 6
         self.health -= amount
         if self.health <= 0:
             self.on_death()
@@ -39,14 +41,23 @@ class Enemy(arcade.Sprite):
         # Placeholder for attack logic
         if not self.is_attacking:
             self.is_attacking = True
-            self.attack_timer = 30  # Attack lasts for 30 frames
-            player.take_damage(10)  # Deal 10 damage to player
+            self.attack_timer = ENEMY_ATTACK_DURATION
+            player.take_damage(ENEMY_ATTACK_DAMAGE)
     
     def update(self, player=0, *args, **kwargs):
         if self.attack_timer > 0:
             self.attack_timer -= 1
         if self.attack_timer == 0:
             self.is_attacking = False
+
+        # Red flash on hit — same feedback as the boss fight. The Boss
+        # overrides its colour again after this (telegraph tints etc.),
+        # so this only drives plain enemies like slimes.
+        if self.hit_flash_timer > 0:
+            self.hit_flash_timer -= 1
+            self.color = (255, 70, 70)
+        else:
+            self.color = (255, 255, 255)
 
     def enemy_pos(self):
         return (self.center_x, self.center_y)
@@ -55,7 +66,7 @@ class Enemy(arcade.Sprite):
 class Slime(Enemy):
     def __init__(self, x, y, patrol_left, patrol_right):
         super().__init__(x, y)
-        self.texture     = arcade.load_texture("assets/enemy.png")
+        self.texture     = arcade.load_texture(resource_path("Assets/enemy.png"))
         self.scale       = ENEMY_SCALING
         self.patrol_left  = patrol_left
         self.patrol_right = patrol_right
@@ -81,9 +92,8 @@ class Slime(Enemy):
             self.change_x = 0
     
     def random_slime_pos_x(self, player):
-        spawn_radius = 250
         (player_pos_x, player_pos_y) = player.player_pos()
-        enemy_rand_x = player_pos_x - spawn_radius + 2 * spawn_radius * random()
+        enemy_rand_x = player_pos_x - ENEMY_SPAWN_RADIUS + 2 * ENEMY_SPAWN_RADIUS * random()
         return enemy_rand_x
     
     def deal_damage(self, player):
