@@ -40,6 +40,28 @@ ENEMY_JUMP_SPEED = 10
 ENEMY_MAX_HEALTH = 100
 ENEMY_SCALING = 0.2
 ENEMY_ATTACK_DAMAGE = 10
+ENEMY_ANIMATION_FPS = 14
+
+# Enemy variants, one per level. The whole world is replayed at level 2
+# with the tougher orange slimes in place of the green ones, so the same
+# maps become a real fight once the player is fully upgraded.
+#   art     — folder under Assets/Enemies/
+#   scale   — chosen so the sprite lands at the size named in the comment
+#   reward  — coins for a kill
+ENEMY_TIERS = {
+    "green": {
+        "art": "green", "scale": 0.20,          # about 61 x 41 px
+        "health": 100, "damage": 10, "speed": 0.5, "reward": 10,
+    },
+    "orange": {
+        "art": "orange", "scale": 0.165,        # about 76 x 48 px, visibly bigger
+        "health": 260, "damage": 25, "speed": 1.1, "reward": 30,
+    },
+}
+
+# Which variant spawns on each level (levels beyond the list reuse the last)
+LEVEL_ENEMIES = ["green", "orange"]
+LEVEL_NAMES = ["Level 1", "Level 2"]
 ENEMY_ATTACK_DURATION = 30  # frames
 ENEMY_SPAWN_TIMER_MIN = 5   # seconds
 ENEMY_SPAWN_TIMER_MAX = 10  # seconds
@@ -129,8 +151,9 @@ HELP_TIPS = [
     "A doorway shows a [F] Enter prompt when you are standing in it.",
     "Cracked walls can be broken by hitting them a few times with SPACE.",
     "Chests hold coins — deeper, better hidden rooms hold far more.",
-    "Fall in a hazard and you are returned to the last solid ground.",
+    "Spikes are instant death — everything else just returns you to safe ground.",
     "Buy the Dash before the boss: dashing through attacks avoids damage.",
+    "Beating the boss starts the next level: same world, far tougher slimes.",
 ]
 
 # Viewport margins
@@ -296,10 +319,9 @@ TILESETS = {
     "BossFight":            "Assets/Tilesets/bossfight.png",
 }
 
-# Spikes (the "Spikes" entity layer): touching one costs health and sends
-# the player back to the last solid ground they stood on, behind the same
-# screen fade the other hazards use.
-SPIKE_DAMAGE = 20
+# Spikes (the "Spikes" entity layer) are lethal: touching one kills the
+# player outright and sends them to the death screen. The gentler
+# "back_to_last_location" tiles still just return you to safe ground.
 
 # "Back to last location" hazard (the back_to_last_location entity layer):
 # touching one fades the screen out and returns the player to the last

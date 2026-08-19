@@ -177,17 +177,17 @@ def load_ogmo_map(filepath, ctx, chest_coins=CHEST_COINS):
                 result.breakable_list.append(Wall(*entity_rect(ent)))
 
         elif name == "Spikes":
-            # Hurt on touch, then return the player to safe ground
+            # Lethal on touch — the run ends and the death screen appears
             for ent in layer["entities"]:
                 spike = Wall(*entity_rect(ent))
-                spike.damage = SPIKE_DAMAGE
+                spike.lethal = True
                 result.hazard_list.append(spike)
 
         elif name == "back_to_last_location":
             # Return the player to safe ground without hurting them
             for ent in layer["entities"]:
                 hazard = Wall(*entity_rect(ent))
-                hazard.damage = 0
+                hazard.lethal = False
                 result.hazard_list.append(hazard)
 
         elif name == "Chest":

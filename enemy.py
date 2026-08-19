@@ -1,5 +1,7 @@
 import arcade
+import glob
 from random import random
+
 from constants import *
 
 class Enemy(arcade.Sprite):
@@ -64,17 +66,57 @@ class Enemy(arcade.Sprite):
     
         
 class Slime(Enemy):
-    def __init__(self, x, y, patrol_left, patrol_right):
+    """
+    A patrolling slime. `variant` picks an entry from ENEMY_TIERS, which
+    sets its artwork, size, health, damage, speed and coin reward — the
+    green slimes of level 1 and the far tougher orange ones of level 2 are
+    the same class with different numbers.
+    """
+
+    _animations = {}
+
+    @classmethod
+    def load_animation(cls, art):
+        """Load one variant's frames once and share them between slimes."""
+        if art not in cls._animations:
+            files = sorted(glob.glob(resource_path(f"Assets/Enemies/{art}/*.png")))
+            cls._animations[art] = [arcade.load_texture(f) for f in files]
+        return cls._animations[art]
+
+    def __init__(self, x, y, patrol_left, patrol_right, variant="green"):
         super().__init__(x, y)
-        self.texture     = arcade.load_texture(resource_path("Assets/enemy.png"))
-        self.scale       = ENEMY_SCALING
+
+        self.variant = variant
+        tier = ENEMY_TIERS[variant]
+        self.frames = self.load_animation(tier["art"])
+        self.texture = self.frames[0]
+        self.scale = tier["scale"]
+
+        # Like the player, the collision shape is pinned to the first frame
+        # so a slime does not change size as it wobbles
+        self._pinned_hit_box = self.hit_box
+        self.frame_index = 0.0
+
+        self.health = self.max_health = tier["health"]
+        self.damage = tier["damage"]
+        self.speed = tier["speed"]
+        self.reward = tier["reward"]
+
         self.patrol_left  = patrol_left
         self.patrol_right = patrol_right
-        self.change_x    = ENEMY_MOVEMENT_SPEED
+        self.change_x    = self.speed
         self.change_y    = 0
+
+    def update_animation(self, delta_time: float = 1 / 60):
+        if not self.frames:
+            return
+        self.frame_index += ENEMY_ANIMATION_FPS * delta_time
+        self.texture = self.frames[int(self.frame_index) % len(self.frames)]
+        self.hit_box = self._pinned_hit_box
 
     def update(self, player=None, *args, **kwargs):
         super().update(player, *args, **kwargs)
+        self.update_animation()
 
         if player is None:
             return
@@ -85,9 +127,9 @@ class Slime(Enemy):
         # setting center_x (as before) skipped gravity entirely and let
         # the slime walk straight through walls.
         if self.center_x < player.center_x:
-            self.change_x = ENEMY_MOVEMENT_SPEED
+            self.change_x = self.speed
         elif self.center_x > player.center_x:
-            self.change_x = -ENEMY_MOVEMENT_SPEED
+            self.change_x = -self.speed
         else:
             self.change_x = 0
     

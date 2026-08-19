@@ -255,25 +255,14 @@ def main():
         view.on_update(1 / 60)
     safe_spot = view.last_safe_pos
     spike = view.hazard_list[0]
-    health_before = player.health
+    player.health = player.max_health
     player.center_x, player.center_y = spike.center_x, spike.center_y
     view.on_update(1 / 60)
-    assert player.health == health_before - SPIKE_DAMAGE
-    for _ in range(90):
-        view.on_update(1 / 60)
-        if view.fade_phase is None:
-            break
-    assert (round(player.center_x), round(player.center_y)) == \
-           (round(safe_spot[0]), round(safe_spot[1]))
-    check(f"spikes cost {SPIKE_DAMAGE} health and return you to safe ground")
+    assert player.health == 0 and view.player_dead
+    assert view.fade_phase is None          # killed outright, no fade-and-return
+    check("spikes kill the player outright, whatever their health was")
 
-    player.health = 5
-    player.center_x, player.center_y = spike.center_x, spike.center_y
-    for _ in range(120):
-        view.on_update(1 / 60)
-        if view.player_dead:
-            break
-    assert view.player_dead and player in list(view.player_list)
+    assert player in list(view.player_list)
     window.switch_to()
     view.on_draw()
     view.on_key_press(arcade.key.E, 0)          # death screen swallows input
@@ -314,6 +303,43 @@ def main():
     assert player.health == 10 and player.money == 0
     check("an upgrade you cannot afford is refused")
 
+    # ── Test 6b: levels ─────────────────────────────────────────────────
+    section("Levels")
+    view.load_room("surface")
+    view.help_open = False
+    assert view.level == 1 and view.enemy_variant == "green"
+    view.spawn_enemy()
+    assert view.enemy_list[-1].variant == "green"
+    check("level 1 spawns the green slimes")
+
+    green = Slime(0, 0, 0, 100, variant="green")
+    orange = Slime(0, 0, 0, 100, variant="orange")
+    assert orange.health > green.health
+    assert orange.damage > green.damage
+    assert orange.speed > green.speed
+    assert orange.reward > green.reward
+    assert orange.width > green.width
+    check(f"orange slimes are tougher: {orange.health}HP vs {green.health}, "
+          f"{orange.damage} damage vs {green.damage}")
+
+    player.money = 500
+    player.has_dash = True
+    kept_health = player.max_health
+    view.broken_rooms.add("starting_cave")
+    view.opened_chests.add(("starter_loot_cave", (0, 0)))
+    view.boss_defeated = True
+    view.advance_level()
+    assert view.level == 2 and view.enemy_variant == "orange"
+    assert player.money == 500 and player.has_dash
+    assert player.max_health == kept_health
+    assert not view.broken_rooms and not view.opened_chests
+    assert not view.boss_defeated
+    view.spawn_enemy()
+    assert view.enemy_list[-1].variant == "orange"
+    window.switch_to()
+    view.on_draw()
+    check("level 2 keeps every upgrade, resets the world, spawns orange slimes")
+
     # ── Test 7: boss fight ──────────────────────────────────────────────
     section("Boss fight")
     view.load_room("vertical_shaft")
@@ -326,7 +352,7 @@ def main():
     check("the boss door hands the player over to the arena")
 
     assert len(fight.tile_layers) > 0 and len(fight.wall_list) > 0
-    assert (fight.arena_width, fight.arena_height) == (1648, 800)
+    assert (fight.arena_width, fight.arena_height) == (1648, 944)
     assert fight.boss.arena_width == fight.arena_width
     for _ in range(60):
         fight.on_update(1 / 60)
@@ -392,18 +418,23 @@ def main():
     assert fight.boss.health == fight.boss.max_health
     check("losing shows the defeat screen and R restarts the fight")
 
+    coins_before = player.money
+    level_before = view.level
     fight.boss.on_death()
     fight.on_update(1 / 60)
     assert fight.fight_over == "victory"
-    assert player.money == BOSS_KILL_REWARD
+    assert player.money == coins_before + BOSS_KILL_REWARD
     fight.on_key_press(arcade.key.ENTER, 0)
-    assert window.current_view is view and view.boss_defeated
-    assert view.current_room == "vertical_shaft" and player.health > 0
-    view.transition_cooldown = 0
-    view.check_cave_entrances()
-    assert view.active_entry is None
-    check("winning pays the reward, returns you to the shaft, closes the door")
+    assert window.current_view is view
+    # Beating the boss finishes the level and starts the next one
+    assert view.level == level_before + 1
+    assert view.current_room == STARTING_ROOM
+    assert player.health == player.max_health
+    assert not view.boss_defeated          # the next boss is waiting again
+    check("winning pays the reward and starts the next level")
 
+    view.load_room("vertical_shaft")
+    view.help_open = False
     view.boss_defeated = False
     use_door("boss_fight")
     fight = window.current_view

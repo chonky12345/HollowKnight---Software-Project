@@ -89,6 +89,12 @@ class GameView(arcade.View):
         # so a flag drives the game-over screen instead
         self.player_dead = False
 
+        # Level. Beating the boss starts the next one: the same maps are
+        # replayed with a tougher enemy variant, and the player keeps every
+        # upgrade and coin they earned. See advance_level().
+        self.level = 1
+        self.level_banner = 0          # frames left showing the "Level N" title
+
     # ────────────────────────────────────────────────────────────────────────
     def setup(self):
         self.player_list = arcade.SpriteList()
@@ -199,7 +205,8 @@ class GameView(arcade.View):
             # Fallback if the map somehow has no detected surface tiles
             spawn_x, surface_top = 180, 508
 
-        enemy = Slime(spawn_x, surface_top, patrol_left=100, patrol_right=400)
+        enemy = Slime(spawn_x, surface_top, patrol_left=100, patrol_right=400,
+                      variant=self.enemy_variant)
         # Rest the enemy's feet just above the tile surface — its texture
         # is already loaded at this point, so enemy.height is accurate.
         enemy.center_y = surface_top + enemy.height / 2 + 1
@@ -478,8 +485,18 @@ class GameView(arcade.View):
             20
         )
 
-        arcade.draw_text("[E] Shop    [H] Help", 10, 450,
+        arcade.draw_text(f"[E] Shop    [H] Help    {self.level_name}", 10, 450,
                          arcade.color.LIGHT_GRAY, 12)
+
+        if self.level_banner > 0:
+            cx = self.window.width / 2
+            fade = min(255, int(255 * self.level_banner / 60))
+            arcade.draw_text(self.level_name, cx, self.window.height / 2 + 40,
+                             (255, 170, 60, fade), 46,
+                             anchor_x="center", bold=True)
+            arcade.draw_text("the orange slimes are far stronger — keep your upgrades",
+                             cx, self.window.height / 2, (230, 220, 200, fade), 14,
+                             anchor_x="center")
 
         if self.shop_open:
             self.draw_shop()
@@ -648,12 +665,6 @@ class GameView(arcade.View):
         # Hazard fade in progress = world frozen while the screen blinks
         # black and the player is returned to their last solid ground
         if self.fade_phase is not None:
-            if self.player_sprite.health <= 0:
-                # Killed by the hazard — the death screen takes over
-                self.fade_phase = None
-                self.fade_alpha = 0
-                self.player_dead = True
-                return
             if self.fade_phase == "out":
                 self.fade_alpha = min(255, self.fade_alpha + HAZARD_FADE_OUT_SPEED)
                 if self.fade_alpha >= 255:
@@ -818,10 +829,13 @@ class GameView(arcade.View):
             if len(self.hazard_list) else []
         )
         if touched_hazards:
+            if any(getattr(h, "lethal", False) for h in touched_hazards):
+                # Spikes kill outright — no fade, straight to the death screen
+                self.player_sprite.health = 0
+                self.player_dead = True
+                print("Killed by spikes — press R to try again")
+                return
             self.fade_phase = "out"
-            damage = max(getattr(h, "damage", 0) for h in touched_hazards)
-            if damage and not self.player_sprite.is_invincible:
-                self.player_sprite.take_damage(damage)
         elif self.physics_engine.can_jump() or self.player_on_platform:
             self.last_safe_pos = (self.player_sprite.center_x,
                                   self.player_sprite.center_y)
@@ -843,6 +857,9 @@ class GameView(arcade.View):
             ):
                 self.active_chest = chest
                 break
+
+        if self.level_banner > 0:
+            self.level_banner -= 1
 
         if self.coin_popup is not None:
             self.coin_popup[1] += 0.6      # drift upward
@@ -954,6 +971,11 @@ class GameView(arcade.View):
         """Return from the arena, arriving back on the boss door."""
         if outcome == "victory":
             self.boss_defeated = True
+            # Beating the boss is the end of a level — start the next one
+            self.player_sprite.health = self.player_sprite.max_health
+            self.window.show_view(self)
+            self.advance_level()
+            return
         # Never drop the player back into the world dead
         if self.player_sprite.health <= 0:
             self.player_sprite.health = self.player_sprite.max_health
@@ -1064,6 +1086,32 @@ class GameView(arcade.View):
                 else:
                     print(f"Breakable wall hit — {group['health']} HP left")
                 break
+
+    @property
+    def enemy_variant(self):
+        """Which slime this level spawns (levels past the list reuse the last)."""
+        return LEVEL_ENEMIES[min(self.level, len(LEVEL_ENEMIES)) - 1]
+
+    @property
+    def level_name(self):
+        return (LEVEL_NAMES[self.level - 1] if self.level <= len(LEVEL_NAMES)
+                else f"Level {self.level}")
+
+    def advance_level(self):
+        """Start the next level: the same world again, tougher enemies.
+
+        The player keeps their health, coins and every upgrade, so the maps
+        they already know become a real fight. The world itself is reset —
+        walls unbroken, chests refilled, the boss waiting again — so there
+        is a full run to play rather than an emptied-out map.
+        """
+        self.level += 1
+        self.broken_rooms = set()
+        self.opened_chests = set()
+        self.boss_defeated = False
+        self.level_banner = 180
+        print(f"=== {self.level_name} — the {self.enemy_variant} slimes are out ===")
+        self.load_room(STARTING_ROOM)
 
     def respawn(self):
         """Restart from the current room at full health. Coins, upgrades
