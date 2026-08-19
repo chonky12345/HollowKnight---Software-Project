@@ -8,6 +8,7 @@ from player import Player
 from enemy import Slime
 from entities import Wall, PlayerSpawner, CaveEntrance, Chest
 from maploader import load_ogmo_map, new_tile_atlas
+import game_camera
 
 
 class GameView(arcade.View):
@@ -182,10 +183,8 @@ class GameView(arcade.View):
         self.active_entry = None
 
         # Snap the camera straight to the player, clamped to the room
-        view_w = self.window.width / self.camera.zoom
-        view_h = self.window.height / self.camera.zoom
-        cam_x, cam_y = self._clamp_camera(spawn_x, spawn_y, view_w, view_h)
-        self.camera.position = (cam_x, cam_y)
+        game_camera.snap_to(self.camera, self.window, spawn_x, spawn_y,
+                            self.map_width, self.map_height)
 
         if len(self.wall_list) == 0:
             print(f"WARNING: room {room_key!r} has no Walls placed yet — "
@@ -774,7 +773,11 @@ class GameView(arcade.View):
 
         # Landing refreshes air abilities; while airborne, clamp jumps so
         # walking off a ledge doesn't grant more air jumps than jumping would
-        if self.physics_engine.can_jump() or self.player_on_platform:
+        self.player_sprite.on_ground = (self.physics_engine.can_jump()
+                                        or self.player_on_platform)
+        self.player_sprite.update_animation(delta_time)
+
+        if self.player_sprite.on_ground:
             self.player_sprite.reset_jumps()
             self.player_sprite.air_dash_used = False
         else:
@@ -783,33 +786,8 @@ class GameView(arcade.View):
                 self.player_sprite.jumps_remaining, max_air_jumps
             )
 
-        # Visible area in world units at current zoom
-        view_w = self.window.width / self.camera.zoom
-        view_h = self.window.height / self.camera.zoom
-
-        # Camera viewport edges in world coords
-        cam_left   = self.camera.position[0] - view_w / 2
-        cam_right  = self.camera.position[0] + view_w / 2
-        cam_bottom = self.camera.position[1] - view_h / 2
-        cam_top    = self.camera.position[1] + view_h / 2
-
-        cam_x = self.camera.position[0]
-        cam_y = self.camera.position[1]
-
-        # Scroll when player gets within SCROLL_MARGIN of viewport edge
-        if self.player_sprite.center_x > cam_right - SCROLL_MARGIN:
-            cam_x += self.player_sprite.center_x - (cam_right - SCROLL_MARGIN)
-        if self.player_sprite.center_x < cam_left + SCROLL_MARGIN:
-            cam_x -= (cam_left + SCROLL_MARGIN) - self.player_sprite.center_x
-        if self.player_sprite.center_y > cam_top - SCROLL_MARGIN:
-            cam_y += self.player_sprite.center_y - (cam_top - SCROLL_MARGIN)
-        if self.player_sprite.center_y < cam_bottom + SCROLL_MARGIN:
-            cam_y -= (cam_bottom + SCROLL_MARGIN) - self.player_sprite.center_y
-
-        # Clamp camera so it never shows outside the map
-        cam_x, cam_y = self._clamp_camera(cam_x, cam_y, view_w, view_h)
-
-        self.camera.position = (cam_x, cam_y)
+        game_camera.follow(self.camera, self.window, self.player_sprite,
+                           self.map_width, self.map_height)
 
         self.enemy_list.update(self.player_sprite)
 
@@ -1136,27 +1114,13 @@ class GameView(arcade.View):
         # menu was up — refresh the cameras on the way back in
         self.on_window_resize(self.window.width, self.window.height)
 
-    def _clamp_camera(self, cam_x, cam_y, view_w, view_h):
-        """Keep the camera inside the map. If the view is bigger than the
-        map on an axis, centre on that axis instead — the naive clamp's
-        min/max invert in that case and freeze the camera in place."""
-        if view_w >= self.map_width:
-            cam_x = self.map_width / 2
-        else:
-            cam_x = max(view_w / 2, min(cam_x, self.map_width - view_w / 2))
-        if view_h >= self.map_height:
-            cam_y = self.map_height / 2
-        else:
-            cam_y = max(view_h / 2, min(cam_y, self.map_height - view_h / 2))
-        return cam_x, cam_y
-
     def _room_zoom(self):
         """The current room's zoom, scaled to the window width so the same
         world area is visible at any window size (see BASE_VIEW_WIDTH)."""
         base = DEFAULT_CAMERA_ZOOM
         if self.current_room is not None:
             base = ROOMS[self.current_room].get("zoom", DEFAULT_CAMERA_ZOOM)
-        return base * self.window.width / BASE_VIEW_WIDTH
+        return game_camera.zoom_for_window(self.window, base)
 
     def on_window_resize(self, width, height):
         """Called by GameWindow when the window size changes (fullscreen
@@ -1170,12 +1134,10 @@ class GameView(arcade.View):
         self.gui_camera.match_window()
 
         if self.player_sprite is not None:
-            view_w = width / self.camera.zoom
-            view_h = height / self.camera.zoom
-            self.camera.position = self._clamp_camera(
-                self.player_sprite.center_x, self.player_sprite.center_y,
-                view_w, view_h
-            )
+            game_camera.snap_to(self.camera, self.window,
+                                self.player_sprite.center_x,
+                                self.player_sprite.center_y,
+                                self.map_width, self.map_height)
 
     def _touching_wall(self):
         """Is the player pressed up against a solid wall on either side?"""

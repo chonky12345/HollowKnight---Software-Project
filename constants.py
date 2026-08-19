@@ -46,6 +46,11 @@ ENEMY_SPAWN_TIMER_MAX = 10  # seconds
 ENEMY_SPAWN_RADIUS = 250
 MAX_ENEMIES = 8
 
+# Player animation — frames live in Assets/Player/<name>/, numbered in
+# order. "idle" and "walk" loop; "jump" and "dash" play once and hold their
+# last frame until the state ends.
+PLAYER_ANIMATION_FPS = {"idle": 12, "walk": 18, "jump": 14, "dash": 24}
+
 # Player attack
 PLAYER_ATTACK_DAMAGE = 20
 PLAYER_ATTACK_RANGE = 100

@@ -41,6 +41,7 @@ from constants import *
 from player import Player
 from boss import Boss
 from maploader import load_ogmo_map
+import game_camera
 
 
 BACKGROUND_COLOR = (24, 22, 30)
@@ -140,11 +141,13 @@ class BossFightView(arcade.View):
             self.boss, gravity_constant=GRAVITY, walls=self.wall_list
         )
 
-        # Fixed camera framing the whole arena, so every telegraph, beam
-        # and falling hazard is visible wherever the player is standing
+        # The arena is shown exactly like a world room — same zoom, camera
+        # scrolling with the player — so the character is the same size
+        # here as everywhere else
         self.camera = arcade.Camera2D()
-        self.camera.zoom = min(self.window.width / W, self.window.height / H)
-        self.camera.position = (W / 2, H / 2)
+        self.camera.zoom = game_camera.zoom_for_window(self.window)
+        game_camera.snap_to(self.camera, self.window,
+                            p.center_x, p.center_y, W, H)
         self.gui_camera = arcade.Camera2D()
 
         arcade.set_background_color(BACKGROUND_COLOR)
@@ -154,9 +157,11 @@ class BossFightView(arcade.View):
         if self.camera is None:
             return
         self.camera.match_window()
-        self.camera.zoom = min(width / self.arena_width,
-                               height / self.arena_height)
-        self.camera.position = (self.arena_width / 2, self.arena_height / 2)
+        self.camera.zoom = game_camera.zoom_for_window(self.window)
+        game_camera.snap_to(self.camera, self.window,
+                            self.player_sprite.center_x,
+                            self.player_sprite.center_y,
+                            self.arena_width, self.arena_height)
         self.gui_camera.match_window()
 
     def _drop_to_ground(self, sprite):
@@ -226,7 +231,11 @@ class BossFightView(arcade.View):
                     p.change_y = 0
                     self.player_on_platform = True
 
-        if self.physics_engine.can_jump() or self.player_on_platform:
+        p.on_ground = (self.physics_engine.can_jump()
+                       or self.player_on_platform)
+        p.update_animation(delta_time)
+
+        if p.on_ground:
             p.reset_jumps()
             p.air_dash_used = False
         else:
@@ -287,6 +296,9 @@ class BossFightView(arcade.View):
                 p.knockback_x = PLAYER_KNOCKBACK_X
             p.change_y = PLAYER_KNOCKBACK_Y
             p.knockback_timer = PLAYER_KNOCKBACK_TIMER
+
+        game_camera.follow(self.camera, self.window, p,
+                           self.arena_width, self.arena_height)
 
         # ── End conditions ─────────────────────────────────────────────
         if self.boss.is_dead:
