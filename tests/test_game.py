@@ -325,6 +325,14 @@ def main():
     assert fight.player_sprite is player
     check("the boss door hands the player over to the arena")
 
+    assert len(fight.tile_layers) > 0 and len(fight.wall_list) > 0
+    assert (fight.arena_width, fight.arena_height) == (1648, 800)
+    assert fight.boss.arena_width == fight.arena_width
+    for _ in range(60):
+        fight.on_update(1 / 60)
+    assert player.center_y > 0 and fight.boss.center_y > 0
+    check("the arena loads from its map, and both fighters stand on its floor")
+
     states_seen = set()
     for frame in range(900):
         fight.on_update(1 / 60)

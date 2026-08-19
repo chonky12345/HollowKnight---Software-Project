@@ -114,7 +114,8 @@ class Boss(Enemy):
         "beam":   (255, 160, 60),
     }
 
-    def __init__(self, x, y, projectile_list, beam_list=None):
+    def __init__(self, x, y, projectile_list, beam_list=None,
+                 arena_width=BOSS_ARENA_WIDTH, arena_height=BOSS_ARENA_HEIGHT):
         super().__init__(x, y)
         self.texture = arcade.load_texture(resource_path("Assets/enemy.png"))
         self.scale = BOSS_SCALING
@@ -122,6 +123,10 @@ class Boss(Enemy):
         self.max_health = BOSS_MAX_HEALTH
         self.projectile_list = projectile_list
         self.beam_list = beam_list if beam_list is not None else arcade.SpriteList()
+        # Rain and beams span the arena, so the boss is told how big it is
+        # rather than assuming the old fixed-size arena
+        self.arena_width = arena_width
+        self.arena_height = arena_height
 
         self.is_dead = False
         self.state = "idle"
@@ -349,12 +354,12 @@ class Boss(Enemy):
             if i == 0:
                 x = player.center_x
             else:
-                lane = BOSS_ARENA_WIDTH * (i / BOSS_RAIN_COUNT)
+                lane = self.arena_width * (i / BOSS_RAIN_COUNT)
                 x = lane + random.uniform(-30, 30)
-            x = max(48, min(BOSS_ARENA_WIDTH - 48, x))
+            x = max(48, min(self.arena_width - 48, x))
             self.projectile_list.append(BossProjectile(
                 x,
-                BOSS_ARENA_HEIGHT - 60,
+                self.arena_height - 60,
                 0,
                 0,                       # gravity accelerates them down
                 damage=BOSS_RAIN_DAMAGE,
@@ -371,16 +376,16 @@ class Boss(Enemy):
         the gaps between lanes are the dodge."""
         lanes = [player.center_y]
         while len(lanes) < BOSS_BEAM_COUNT:
-            y = random.uniform(70, BOSS_ARENA_HEIGHT - 70)
+            y = random.uniform(70, self.arena_height - 70)
             if all(abs(y - lane) > BOSS_BEAM_THICKNESS * 2.5 for lane in lanes):
                 lanes.append(y)
 
         for y in lanes:
-            length = BOSS_ARENA_WIDTH * random.choice((0.5, 1 / 3))
+            length = self.arena_width * random.choice((0.5, 1 / 3))
             if random.random() < 0.5:
                 left = 32                                    # from left wall
             else:
-                left = BOSS_ARENA_WIDTH - 32 - length        # from right wall
+                left = self.arena_width - 32 - length        # from right wall
             self.beam_list.append(BossBeam(left, y, length))
 
     def _spawn_shockwaves(self):

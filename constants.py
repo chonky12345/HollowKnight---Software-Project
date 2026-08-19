@@ -288,6 +288,7 @@ TILESETS = {
     "Crystal Caverns":      "Assets/Tilesets/crystal_caverns.png",
     "Underground Lake":     "Assets/Tilesets/underground_lake.png",
     "Parkour":              "Assets/Tilesets/parkour.png",
+    "BossFight":            "Assets/Tilesets/bossfight.png",
 }
 
 # Spikes (the "Spikes" entity layer): touching one costs health and sends
@@ -306,10 +307,14 @@ HAZARD_FADE_IN_SPEED  = 10   # alpha per frame while fading back in
 # When it breaks, the room reloads using its "broken_map" if it has one.
 BREAKABLE_WALL_HEALTH = 30
 
-# Boss fight — arena is built in code (boss_fight_view.py), no map file.
+# Boss fight. The arena is an Ogmo map like any other room, but it is shown
+# by its own View (boss_fight_view.py) because the fight has its own rules.
 # Run it standalone with:  python boss_main.py
-BOSS_ARENA_WIDTH  = 960
-BOSS_ARENA_HEIGHT = 544
+BOSS_ARENA_MAP = "Maps/BossFight.json"
+# Fallback size, used only if the map is missing; the real dimensions come
+# from the map file itself.
+BOSS_ARENA_WIDTH  = 1648
+BOSS_ARENA_HEIGHT = 800
 
 BOSS_MAX_HEALTH      = 1000
 BOSS_SCALING         = 0.45

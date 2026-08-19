@@ -7,23 +7,10 @@ from constants import *
 from player import Player
 from enemy import Slime
 from entities import Wall, PlayerSpawner, CaveEntrance, Chest
-
-
-def _pad_rect(x, y, w, h, pad):
-    """Grow a top-left-anchored rect by `pad` total, keeping its center fixed."""
-    return x - pad / 2, y - pad / 2, w + pad, h + pad
+from maploader import load_ogmo_map, new_tile_atlas
 
 
 class GameView(arcade.View):
-    # Shared across every room so switching rooms never reloads or re-slices
-    # a tileset that's already been used. Keyed by tileset_path, and by
-    # (tileset_path, tile_id) — without this, every tile cell got its own
-    # unique texture even when many cells share the same tile art, which
-    # blew through the texture atlas's fixed slot count once a second
-    # fully-painted room was loaded.
-    _spritesheet_cache = {}
-    _tile_texture_cache = {}
-
     def __init__(self):
         super().__init__()
 
@@ -39,7 +26,6 @@ class GameView(arcade.View):
         # first). Built generically from whatever tile layers the map
         # has — layer names don't matter, only their tileset label.
         self.tile_layers = []
-        self._room_tile_atlas = None   # per-room atlas (see _get_tile_atlas)
 
         self.player_sprite  = None
         self.physics_engine = None
@@ -129,16 +115,7 @@ class GameView(arcade.View):
         self.current_room = room_key
         self.camera.zoom = self._room_zoom()
 
-        self.wall_list = arcade.SpriteList(use_spatial_hash=True)
-        self.platform_list = arcade.SpriteList(use_spatial_hash=True)
         self.enemy_list = arcade.SpriteList()
-        self.cave_entrance_list = arcade.SpriteList()
-        self.breakable_list = arcade.SpriteList(use_spatial_hash=True)
-        self.chest_list = arcade.SpriteList()
-        self.hazard_list = arcade.SpriteList(use_spatial_hash=True)
-        self.tile_layers = []
-        # Drop the previous room's atlas — the new room builds its own
-        self._room_tile_atlas = None
         self.enemy_physics_engines = {}
         self.surface_walls = []
 
@@ -237,126 +214,20 @@ class GameView(arcade.View):
 
     # ────────────────────────────────────────────────────────────────────────
     def load_map(self, filepath):
-        with open(resource_path(filepath), "r") as f:
-            data = json.load(f)
+        """Load one Ogmo level into this view's sprite lists (the parsing
+        itself lives in maploader, shared with the boss arena)."""
+        room_coins = ROOMS[self.current_room].get("chest_coins", CHEST_COINS)
+        loaded = load_ogmo_map(filepath, self.window.ctx, chest_coins=room_coins)
 
-        # Each room defines its own world size
-        self.map_width = data["width"]
-        self.map_height = data["height"]
-
-        spawn_x, spawn_y = PLAYER_START_X, PLAYER_START_Y
-
-        for layer in data["layers"]:
-            name = layer["name"]
-
-            if "tileset" in layer:
-                # Tile-art layer — rendered generically, whatever its name.
-                # File order is top-first in Ogmo, so each new layer is
-                # INSERTED at the front of tile_layers (drawn first =
-                # furthest back).
-                if "data2D" in layer or "data" in layer:
-                    cells = (layer["data"] if "data" in layer
-                             else [t for row in layer["data2D"] for t in row])
-                    if all(t == -1 for t in cells):
-                        continue   # nothing painted on this layer
-                    tileset_path = TILESETS.get(layer["tileset"])
-                    if tileset_path is None:
-                        print(f"WARNING: tile layer {name!r} uses tileset "
-                              f"{layer['tileset']!r} which isn't in TILESETS "
-                              f"(constants.py) — layer not rendered.")
-                        continue
-                    sprite_list = arcade.SpriteList(atlas=self._get_tile_atlas())
-                    if "data2D" in layer:
-                        self._load_tile_layer_2d(layer, 16, 16, tileset_path, sprite_list)
-                    else:
-                        self._load_tile_layer_1d(layer, 16, 16, tileset_path, sprite_list)
-                    if len(sprite_list):
-                        self.tile_layers.insert(0, sprite_list)
-                else:
-                    # e.g. Ogmo's dataCoords2D export mode — not parsed
-                    print(f"NOTE: tile layer {name!r} uses an unsupported "
-                          f"export format and was not rendered.")
-            elif name == "BreakableWalls":
-                # Solid until smashed — kept separate from wall_list so a
-                # sword swing can find and destroy them (see do_player_attack)
-                for ent in layer["entities"]:
-                    w = ent.get("width", Wall.TILE_SIZE)
-                    h = ent.get("height", Wall.TILE_SIZE)
-                    ay = self.map_height - ent["y"] - h
-                    self.breakable_list.append(Wall(ent["x"], ay, w, h))
-            elif name == "Walls":
-                # Ogmo "Walls" entities are resizable rectangles, so their
-                # own width/height are used when present
-                for ent in layer["entities"]:
-                    if ent["name"].strip().lower() in ("walls", "wall"):
-                        w = ent.get("width", Wall.TILE_SIZE)
-                        h = ent.get("height", Wall.TILE_SIZE)
-                        ay = self.map_height - ent["y"] - h
-                        px, py, pw, ph = _pad_rect(ent["x"], ay, w, h, WALL_COLLISION_PADDING)
-                        self.wall_list.append(Wall(px, py, pw, ph))
-
-            elif name == "PassableWalls":
-                # One-way "jump-through" platforms — solid from above, but
-                # the player can jump up through them or drop down (S) to
-                # pass through. Deliberately NOT added to wall_list, so the
-                # player's normal physics engine treats them as open air;
-                # collision from above is handled manually in on_update.
-                for ent in layer["entities"]:
-                    w = ent.get("width", Wall.TILE_SIZE)
-                    h = ent.get("height", Wall.TILE_SIZE)
-                    ay = self.map_height - ent["y"] - h
-                    self.platform_list.append(Wall(ent["x"], ay, w, h))
-
-            elif name == "Chest":
-                # Loot amount: per-chest "coins" Value in Ogmo beats the
-                # room's "chest_coins" (ROOMS), beats the global default —
-                # so the shared loot-room map pays out per room
-                room_coins = ROOMS[self.current_room].get("chest_coins",
-                                                          CHEST_COINS)
-                for ent in layer["entities"]:
-                    ay = self.map_height - ent["y"] - 16
-                    coins = ent.get("values", {}).get("coins", room_coins)
-                    self.chest_list.append(Chest(ent["x"], ay, coins))
-
-            elif name == "Spikes":
-                # Spikes hurt on touch and then return the player to safe
-                # ground — same trigger tiles as back_to_last_location,
-                # but they take a bite out of your health first
-                for ent in layer["entities"]:
-                    w = ent.get("width", Wall.TILE_SIZE)
-                    h = ent.get("height", Wall.TILE_SIZE)
-                    ay = self.map_height - ent["y"] - h
-                    spike = Wall(ent["x"], ay, w, h)
-                    spike.damage = SPIKE_DAMAGE
-                    self.hazard_list.append(spike)
-
-            elif name == "back_to_last_location":
-                # Invisible trigger tiles (art comes from the tile layer):
-                # touching one sends the player back to the last solid
-                # ground they stood on, behind a screen fade
-                for ent in layer["entities"]:
-                    w = ent.get("width", Wall.TILE_SIZE)
-                    h = ent.get("height", Wall.TILE_SIZE)
-                    ay = self.map_height - ent["y"] - h
-                    hazard = Wall(ent["x"], ay, w, h)
-                    hazard.damage = 0          # returns you, but does not hurt
-                    self.hazard_list.append(hazard)
-
-            elif name == "player":
-                for ent in layer["entities"]:
-                    if ent["name"] == "Player Spawner":
-                        ay = self.map_height - ent["y"] - 16
-                        s = PlayerSpawner(ent["x"], ay)
-                        spawn_x, spawn_y = s.center_x, s.center_y
-
-            elif name == "Cave Access":
-                for ent in layer["entities"]:
-                    if ent["name"] == "cave entrance":
-                        ay = self.map_height - ent["y"] - CaveEntrance.TILE_SIZE
-                        door_tag = ent.get("values", {}).get("door_id", "")
-                        self.cave_entrance_list.append(
-                            CaveEntrance(ent["x"], ay, ent["id"], door_tag)
-                        )
+        self.map_width = loaded.width
+        self.map_height = loaded.height
+        self.tile_layers = loaded.tile_layers
+        self.wall_list = loaded.wall_list
+        self.platform_list = loaded.platform_list
+        self.breakable_list = loaded.breakable_list
+        self.hazard_list = loaded.hazard_list
+        self.cave_entrance_list = loaded.cave_entrance_list
+        self.chest_list = loaded.chest_list
 
         print(f"Tile art layers : {len(self.tile_layers)} "
               f"({[len(sl) for sl in self.tile_layers]} tiles each)")
@@ -364,12 +235,12 @@ class GameView(arcade.View):
         print(f"Breakable walls : {len(self.breakable_list)} tiles")
         print(f"Platforms       : {len(self.platform_list)} (one-way, jump-through)")
         print(f"Cave entrances  : {len(self.cave_entrance_list)}")
-        print(f"Player spawn    : ({spawn_x}, {spawn_y})")
+        print(f"Player spawn    : {loaded.spawn}")
 
         self._compute_surface_walls()
         print(f"Surface walls   : {len(self.surface_walls)} (valid enemy spawn points)")
 
-        return spawn_x, spawn_y
+        return loaded.spawn
 
     # ────────────────────────────────────────────────────────────────────────
     def _compute_surface_walls(self):
@@ -386,7 +257,6 @@ class GameView(arcade.View):
             if (round(t.center_x), round(t.center_y + Wall.TILE_SIZE)) not in occupied
         ]
 
-    # ────────────────────────────────────────────────────────────────────────
     def _build_cave_doors(self):
         """
         Group adjacent "cave entrance" tiles into logical doors. A door drawn
@@ -495,18 +365,19 @@ class GameView(arcade.View):
             print(f"Breakable groups: {len(self.breakable_groups)} "
                   f"({BREAKABLE_WALL_HEALTH} HP each)")
 
-    def open_chest(self, chest):
-        # Guard + clear the prompt immediately: active_chest is otherwise
-        # only refreshed on the next update, so two key presses inside one
-        # frame would pay out twice
-        if chest.opened:
-            return
-        chest.open()
-        self.active_chest = None
-        self.opened_chests.add((self.current_room, chest.cell_key))
-        self.player_sprite.money += chest.coins
-        self.coin_popup = [chest.center_x, chest.top + 12, chest.coins, 75]
-        print(f"Chest opened: +{chest.coins} coins")
+    def _break_wall(self, group):
+        print("Breakable wall destroyed!")
+        self.breakable_groups.remove(group)
+        for s in group["sprites"]:
+            s.remove_from_sprite_lists()
+
+        # If the room has a broken-variant map, remember it and reload in
+        # place (art swaps to the open passage; player keeps their spot).
+        # Rooms without a variant just lose the collision.
+        if "broken_map" in ROOMS[self.current_room]:
+            self.broken_rooms.add(self.current_room)
+            p = self.player_sprite
+            self.load_room(self.current_room, spawn_pos=(p.center_x, p.center_y))
 
     def _settle_chests(self):
         """
@@ -522,20 +393,6 @@ class GameView(arcade.View):
                     and s.top <= chest.bottom + 1]
             if tops:
                 chest.bottom = max(tops)
-
-    def _break_wall(self, group):
-        print("Breakable wall destroyed!")
-        self.breakable_groups.remove(group)
-        for s in group["sprites"]:
-            s.remove_from_sprite_lists()
-
-        # If the room has a broken-variant map, remember it and reload in
-        # place (art swaps to the open passage; player keeps their spot).
-        # Rooms without a variant just lose the collision.
-        if "broken_map" in ROOMS[self.current_room]:
-            self.broken_rooms.add(self.current_room)
-            p = self.player_sprite
-            self.load_room(self.current_room, spawn_pos=(p.center_x, p.center_y))
 
     def _door_transition(self, door):
         """
@@ -573,100 +430,18 @@ class GameView(arcade.View):
             return best
         return None
 
-    # ────────────────────────────────────────────────────────────────────────
-    def _get_tile_atlas(self):
-        """
-        A dedicated texture atlas for THIS room's tile-art SpriteLists,
-        created fresh on every room load. Rooms are painted as
-        full-coverage mosaics with almost no repeated tile IDs, so each
-        one needs ~6000 distinct textures — a single shared atlas
-        (even at capacity=8 / 32768 slots) overflowed once the player had
-        toured five or six rooms and the next room simply failed to
-        render. Only one room is ever drawn at a time, so each load gets
-        its own atlas and the previous one is garbage-collected.
-        """
-        if self._room_tile_atlas is None:
-            self._room_tile_atlas = arcade.DefaultTextureAtlas(
-                size=(512, 512), border=2, auto_resize=True,
-                ctx=self.window.ctx, capacity=4
-            )
-        return self._room_tile_atlas
-
-    def _get_spritesheet(self, tileset_path):
-        sheet = self._spritesheet_cache.get(tileset_path)
-        if sheet is None:
-            sheet = arcade.load_spritesheet(resource_path(tileset_path))
-            self._spritesheet_cache[tileset_path] = sheet
-        return sheet
-
-    def _get_tile_texture(self, tileset_path, sheet, tile_id, tiles_per_row, tile_w, tile_h):
-        """
-        Slice one tile from a SpriteSheet using Arcade 3.x LRBT rect, cached
-        by (tileset_path, tile_id) so repeated tile art reuses one texture
-        instead of allocating a new atlas slot per cell.
-        Ogmo image coords: (0,0) = top-left. Arcade LRBT bottom/top are in
-        image-space pixels from the top.
-        """
-        key = (tileset_path, tile_id)
-        texture = self._tile_texture_cache.get(key)
-        if texture is None:
-            src_col = tile_id % tiles_per_row
-            src_row = tile_id // tiles_per_row
-            left   = src_col * tile_w
-            bottom = src_row * tile_h
-            right  = left + tile_w
-            top    = bottom + tile_h
-            texture = sheet.get_texture(arcade.LRBT(left, right, bottom, top))
-            self._tile_texture_cache[key] = texture
-        return texture
-
-    # ────────────────────────────────────────────────────────────────────────
-    def _load_tile_layer_1d(self, layer, tile_w, tile_h, tileset_path, sprite_list):
-        """
-        Flat 1-D tile array (exportMode 0 / arrayMode 0).
-        index = WHERE to place the tile (grid position)
-        tile_id = WHICH tile to slice from the spritesheet
-        -1 = empty.
-        """
-        cols      = layer["gridCellsX"]
-        tile_data = layer["data"]
-
-        sheet         = self._get_spritesheet(tileset_path)
-        tiles_per_row = sheet.image.width // tile_w
-
-        for index, tile_id in enumerate(tile_data):
-            if tile_id == -1:
-                continue
-
-            col = index % cols
-            row = index // cols
-
-            sprite          = arcade.Sprite()
-            sprite.texture  = self._get_tile_texture(tileset_path, sheet, tile_id, tiles_per_row, tile_w, tile_h)
-            sprite.center_x = col * tile_w + tile_w / 2
-            # Flip Y: Ogmo row 0 = top, Arcade row 0 = bottom
-            sprite.center_y = (self.map_height - tile_h) - (row * tile_h) + tile_h / 2
-            sprite_list.append(sprite)
-
-    # ────────────────────────────────────────────────────────────────────────
-    def _load_tile_layer_2d(self, layer, tile_w, tile_h, tileset_path, sprite_list):
-        """2-D tile array (arrayMode 1). data2D[row][col]. -1 = empty."""
-        tile_data = layer["data2D"]
-
-        sheet         = self._get_spritesheet(tileset_path)
-        tiles_per_row = sheet.image.width // tile_w
-
-        for row_idx, row_data in enumerate(tile_data):
-            for col_idx, tile_id in enumerate(row_data):
-                if tile_id == -1:
-                    continue
-
-                sprite          = arcade.Sprite()
-                sprite.texture  = self._get_tile_texture(tileset_path, sheet, tile_id, tiles_per_row, tile_w, tile_h)
-                sprite.center_x = col_idx * tile_w + tile_w / 2
-                # Flip Y: Ogmo row 0 = top, Arcade row 0 = bottom
-                sprite.center_y = (self.map_height - tile_h) - (row_idx * tile_h) + tile_h / 2
-                sprite_list.append(sprite)
+    def open_chest(self, chest):
+        # Guard + clear the prompt immediately: active_chest is otherwise
+        # only refreshed on the next update, so two key presses inside one
+        # frame would pay out twice
+        if chest.opened:
+            return
+        chest.open()
+        self.active_chest = None
+        self.opened_chests.add((self.current_room, chest.cell_key))
+        self.player_sprite.money += chest.coins
+        self.coin_popup = [chest.center_x, chest.top + 12, chest.coins, 75]
+        print(f"Chest opened: +{chest.coins} coins")
 
     # ────────────────────────────────────────────────────────────────────────
     def on_draw(self):

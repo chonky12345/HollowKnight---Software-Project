@@ -40,11 +40,9 @@ import arcade
 from constants import *
 from player import Player
 from boss import Boss
+from maploader import load_ogmo_map
 
 
-# Arena block colours (placeholder art — swap for tiles later)
-WALL_COLOR = (58, 60, 72)
-PLATFORM_COLOR = (110, 95, 70)
 BACKGROUND_COLOR = (24, 22, 30)
 
 
@@ -56,6 +54,9 @@ class BossFightView(arcade.View):
 
         self.player_list = None
         self.boss_list = None
+        self.tile_layers = []
+        self.arena_width = BOSS_ARENA_WIDTH
+        self.arena_height = BOSS_ARENA_HEIGHT
         self.wall_list = None
         self.platform_list = None
         self.projectile_list = None
@@ -100,32 +101,34 @@ class BossFightView(arcade.View):
         p.dash_cooldown_timer = 0
         p.attack_timer = 0
         p.is_attacking = False
-        p.center_x = 130
-        p.center_y = 120
 
         self.player_list = arcade.SpriteList()
         self.player_list.append(p)
 
-        # Arena — solid box with a few one-way platforms for dodging
-        self.wall_list = arcade.SpriteList(use_spatial_hash=True)
-        self.platform_list = arcade.SpriteList(use_spatial_hash=True)
-        W, H = BOSS_ARENA_WIDTH, BOSS_ARENA_HEIGHT
+        # Arena — a real Ogmo map, loaded the same way the world's rooms are
+        arena = load_ogmo_map(BOSS_ARENA_MAP, self.window.ctx)
+        self.tile_layers = arena.tile_layers
+        self.wall_list = arena.wall_list
+        self.platform_list = arena.platform_list
+        W = self.arena_width = arena.width
+        H = self.arena_height = arena.height
 
-        self.wall_list.append(self._block(0, 0, W, 32, WALL_COLOR))            # floor
-        self.wall_list.append(self._block(0, H - 32, W, 32, WALL_COLOR))       # ceiling
-        self.wall_list.append(self._block(0, 32, 32, H - 64, WALL_COLOR))      # left wall
-        self.wall_list.append(self._block(W - 32, 32, 32, H - 64, WALL_COLOR)) # right wall
+        # Enter where the doorway is — the way the player walked in
+        if len(arena.cave_entrance_list):
+            door = arena.cave_entrance_list[0]
+            p.center_x, p.center_y = door.center_x, door.center_y
+        else:
+            p.center_x, p.center_y = arena.spawn
+        self._drop_to_ground(p)
 
-        self.platform_list.append(self._block(140, 195, 200, 14, PLATFORM_COLOR))
-        self.platform_list.append(self._block(620, 195, 200, 14, PLATFORM_COLOR))
-        self.platform_list.append(self._block(400, 320, 160, 14, PLATFORM_COLOR))
-
-        # Boss
+        # Boss waits on the far side of the arena from the entrance
         self.projectile_list = arcade.SpriteList()
         self.beam_list = arcade.SpriteList()
-        self.boss = Boss(0, 0, self.projectile_list, self.beam_list)
-        self.boss.center_x = W - 220
-        self.boss.bottom = 33
+        self.boss = Boss(0, 0, self.projectile_list, self.beam_list,
+                         arena_width=W, arena_height=H)
+        self.boss.center_x = (W - 220) if p.center_x < W / 2 else 220
+        self.boss.center_y = p.center_y
+        self._drop_to_ground(self.boss)
         self.boss_list = arcade.SpriteList()
         self.boss_list.append(self.boss)
 
@@ -137,7 +140,8 @@ class BossFightView(arcade.View):
             self.boss, gravity_constant=GRAVITY, walls=self.wall_list
         )
 
-        # Fixed camera showing the whole arena
+        # Fixed camera framing the whole arena, so every telegraph, beam
+        # and falling hazard is visible wherever the player is standing
         self.camera = arcade.Camera2D()
         self.camera.zoom = min(self.window.width / W, self.window.height / H)
         self.camera.position = (W / 2, H / 2)
@@ -150,18 +154,19 @@ class BossFightView(arcade.View):
         if self.camera is None:
             return
         self.camera.match_window()
-        self.camera.zoom = min(width / BOSS_ARENA_WIDTH,
-                               height / BOSS_ARENA_HEIGHT)
-        self.camera.position = (BOSS_ARENA_WIDTH / 2, BOSS_ARENA_HEIGHT / 2)
+        self.camera.zoom = min(width / self.arena_width,
+                               height / self.arena_height)
+        self.camera.position = (self.arena_width / 2, self.arena_height / 2)
         self.gui_camera.match_window()
 
-    @staticmethod
-    def _block(x, y, w, h, color):
-        """Solid coloured rectangle, positioned by its bottom-left corner."""
-        block = arcade.SpriteSolidColor(int(w), int(h), color=color)
-        block.center_x = x + w / 2
-        block.center_y = y + h / 2
-        return block
+    def _drop_to_ground(self, sprite):
+        """Rest a sprite on the highest solid surface beneath it, so the
+        arena's own floor decides where fighters stand."""
+        tops = [s.top for s in list(self.wall_list) + list(self.platform_list)
+                if s.left <= sprite.center_x <= s.right
+                and s.top <= sprite.bottom + 1]
+        if tops:
+            sprite.bottom = max(tops) + 1
 
     # ────────────────────────────────────────────────────────────────────
     def on_update(self, delta_time):
@@ -317,8 +322,8 @@ class BossFightView(arcade.View):
         self.clear()
 
         self.camera.use()
-        self.wall_list.draw()
-        self.platform_list.draw()
+        for layer in self.tile_layers:
+            layer.draw()
         self.beam_list.draw()
         self.projectile_list.draw()
         self.boss_list.draw()
