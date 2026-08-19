@@ -191,9 +191,15 @@ ROOMS = {
         "map": "Maps/UndergroundLake.json",
         "zoom": 0.8,
     },
-    # A door tagged "parkour" already waits in the vertical shaft — make
-    # the map and uncomment to hook it up:
-    # "parkour": {"map": "Maps/Parkour.json", "zoom": 0.8},
+    "parkour": {
+        "map": "Maps/Parkour.json",
+        "zoom": 0.8,
+    },
+    "secret_loot_room_3": {
+        "map": "Maps/SecretLootRoom.json",
+        "zoom": 0.8,
+        "chest_coins": 300,     # hardest to reach, so the richest chest
+    },
 }
 
 # A door tagged with this instead of a room key launches the boss fight
@@ -252,6 +258,9 @@ TRANSITIONS = {
     "secret_loot_room_2": [
         {"id": "surface_cave", "to": "crystal_caverns"},
     ],
+    "secret_loot_room_3": [
+        {"id": "surface_cave", "to": "parkour"},
+    ],
     # The lake has no door back to the lower caverns, so arriving from
     # there needs a spawn point — the wide upper ledge
     "lower_caverns": [
@@ -278,7 +287,13 @@ TILESETS = {
     "Lower Caverns":        "Assets/Tilesets/lower_caverns.png",
     "Crystal Caverns":      "Assets/Tilesets/crystal_caverns.png",
     "Underground Lake":     "Assets/Tilesets/underground_lake.png",
+    "Parkour":              "Assets/Tilesets/parkour.png",
 }
+
+# Spikes (the "Spikes" entity layer): touching one costs health and sends
+# the player back to the last solid ground they stood on, behind the same
+# screen fade the other hazards use.
+SPIKE_DAMAGE = 20
 
 # "Back to last location" hazard (the back_to_last_location entity layer):
 # touching one fades the screen out and returns the player to the last

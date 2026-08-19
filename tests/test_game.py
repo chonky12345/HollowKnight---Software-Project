@@ -212,6 +212,80 @@ def main():
     assert player.health < health_before
     check("dashing grants invincibility; walking into an enemy still hurts")
 
+    # ── Test 5b: sword reach ────────────────────────────────────────────
+    section("Sword reach")
+    view.load_room("surface")
+    view.help_open = False
+    player.center_x, player.center_y = 400, 700
+    player.facing = 1
+    left, right, bottom, top = player.attack_rect()
+    reach = right - player.center_x
+    furthest = 0
+    for distance in range(30, 260, 5):
+        target = Slime(player.center_x + distance, player.center_y, 0, 900)
+        one = arcade.SpriteList()
+        one.append(target)
+        before = target.health
+        player.is_attacking = False
+        player.attack_timer = 0
+        player.player_attack(one)
+        if target.health < before:
+            furthest = distance
+    assert furthest >= reach, (furthest, reach)
+    check(f"an enemy anywhere inside the {reach:.0f}px swing is hit "
+          f"(reaches a centre {furthest}px away)")
+
+    behind = Slime(player.center_x - 120, player.center_y, 0, 900)
+    one = arcade.SpriteList()
+    one.append(behind)
+    before = behind.health
+    player.is_attacking = False
+    player.attack_timer = 0
+    player.player_attack(one)
+    assert behind.health == before
+    check("an enemy behind the player is not hit")
+
+    # ── Test 5c: spikes and dying ───────────────────────────────────────
+    section("Spikes and death")
+    view.load_room("parkour")
+    view.help_open = False
+    assert len(view.hazard_list) > 0
+    player.center_x, player.center_y = 100, 700
+    for _ in range(60):
+        view.on_update(1 / 60)
+    safe_spot = view.last_safe_pos
+    spike = view.hazard_list[0]
+    health_before = player.health
+    player.center_x, player.center_y = spike.center_x, spike.center_y
+    view.on_update(1 / 60)
+    assert player.health == health_before - SPIKE_DAMAGE
+    for _ in range(90):
+        view.on_update(1 / 60)
+        if view.fade_phase is None:
+            break
+    assert (round(player.center_x), round(player.center_y)) == \
+           (round(safe_spot[0]), round(safe_spot[1]))
+    check(f"spikes cost {SPIKE_DAMAGE} health and return you to safe ground")
+
+    player.health = 5
+    player.center_x, player.center_y = spike.center_x, spike.center_y
+    for _ in range(120):
+        view.on_update(1 / 60)
+        if view.player_dead:
+            break
+    assert view.player_dead and player in list(view.player_list)
+    window.switch_to()
+    view.on_draw()
+    view.on_key_press(arcade.key.E, 0)          # death screen swallows input
+    assert not view.shop_open
+    check("running out of health shows the death screen and freezes the game")
+
+    view.on_key_press(arcade.key.R, 0)
+    assert not view.player_dead
+    assert player.health == player.max_health
+    view.on_update(1 / 60)
+    check("R respawns at full health and the game runs again")
+
     # ── Test 6: shop ────────────────────────────────────────────────────
     section("Shop")
     player.money = 5000
@@ -321,6 +395,25 @@ def main():
     view.check_cave_entrances()
     assert view.active_entry is None
     check("winning pays the reward, returns you to the shaft, closes the door")
+
+    view.boss_defeated = False
+    use_door("boss_fight")
+    fight = window.current_view
+    player.health = 0
+    player.take_damage(1)
+    fight.on_update(1 / 60)
+    assert fight.fight_over == "defeat"
+    assert player in list(fight.player_list) and player in list(view.player_list)
+    fight.on_key_press(arcade.key.ENTER, 0)
+    assert window.current_view is view and player.health > 0
+    for _ in range(60):
+        view.on_update(1 / 60)
+    window.switch_to()
+    view.on_draw()
+    view.on_key_press(arcade.key.E, 0)
+    assert view.shop_open
+    view.on_key_press(arcade.key.E, 0)
+    check("losing the boss fight returns you to a world that still works")
 
     # ── Test 8: menus and help ──────────────────────────────────────────
     section("Menus and help")

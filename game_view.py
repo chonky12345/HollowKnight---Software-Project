@@ -98,6 +98,10 @@ class GameView(arcade.View):
         self.fade_phase = None         # None / "out" / "in"
         self.fade_alpha = 0
 
+        # Death — the player sprite is never removed (other views share it),
+        # so a flag drives the game-over screen instead
+        self.player_dead = False
+
     # ────────────────────────────────────────────────────────────────────────
     def setup(self):
         self.player_list = arcade.SpriteList()
@@ -314,6 +318,18 @@ class GameView(arcade.View):
                     coins = ent.get("values", {}).get("coins", room_coins)
                     self.chest_list.append(Chest(ent["x"], ay, coins))
 
+            elif name == "Spikes":
+                # Spikes hurt on touch and then return the player to safe
+                # ground — same trigger tiles as back_to_last_location,
+                # but they take a bite out of your health first
+                for ent in layer["entities"]:
+                    w = ent.get("width", Wall.TILE_SIZE)
+                    h = ent.get("height", Wall.TILE_SIZE)
+                    ay = self.map_height - ent["y"] - h
+                    spike = Wall(ent["x"], ay, w, h)
+                    spike.damage = SPIKE_DAMAGE
+                    self.hazard_list.append(spike)
+
             elif name == "back_to_last_location":
                 # Invisible trigger tiles (art comes from the tile layer):
                 # touching one sends the player back to the last solid
@@ -322,7 +338,9 @@ class GameView(arcade.View):
                     w = ent.get("width", Wall.TILE_SIZE)
                     h = ent.get("height", Wall.TILE_SIZE)
                     ay = self.map_height - ent["y"] - h
-                    self.hazard_list.append(Wall(ent["x"], ay, w, h))
+                    hazard = Wall(ent["x"], ay, w, h)
+                    hazard.damage = 0          # returns you, but does not hurt
+                    self.hazard_list.append(hazard)
 
             elif name == "player":
                 for ent in layer["entities"]:
@@ -693,6 +711,8 @@ class GameView(arcade.View):
             self.draw_shop()
         if self.help_open:
             self.draw_help()
+        if self.player_dead:
+            self.draw_death_screen()
 
         # Hazard teleport fade — drawn over everything
         if self.fade_alpha > 0:
@@ -707,13 +727,10 @@ class GameView(arcade.View):
         p = self.player_sprite
         if p.attack_timer <= 0 or p.health <= 0:
             return
-        if p.facing == 1:
-            left, right = p.right, p.right + p.attack_range
-        else:
-            left, right = p.left - p.attack_range, p.left
+        left, right, bottom, top = p.attack_rect()
         alpha = int(140 * p.attack_timer / PLAYER_ATTACK_DURATION)
         arcade.draw_lrbt_rectangle_filled(
-            left, right, p.bottom, p.top, (255, 255, 255, alpha)
+            left, right, bottom, top, (255, 255, 255, alpha)
         )
 
     def _draw_door_prompt(self):
@@ -850,13 +867,19 @@ class GameView(arcade.View):
     # ────────────────────────────────────────────────────────────────────────
     def on_update(self, delta_time):
 
-        # Shop or help open = game paused
-        if self.shop_open or self.help_open:
+        # Shop, help or the death screen = game paused
+        if self.shop_open or self.help_open or self.player_dead:
             return
 
         # Hazard fade in progress = world frozen while the screen blinks
         # black and the player is returned to their last solid ground
         if self.fade_phase is not None:
+            if self.player_sprite.health <= 0:
+                # Killed by the hazard — the death screen takes over
+                self.fade_phase = None
+                self.fade_alpha = 0
+                self.player_dead = True
+                return
             if self.fade_phase == "out":
                 self.fade_alpha = min(255, self.fade_alpha + HAZARD_FADE_OUT_SPEED)
                 if self.fade_alpha >= 255:
@@ -1013,7 +1036,7 @@ class GameView(arcade.View):
 
         self.camera.position = (cam_x, cam_y)
 
-        self.enemy_list.update(self.player_list[0])
+        self.enemy_list.update(self.player_sprite)
 
         # AI (Slime.update) only sets change_x for direction. Actually
         # moving each enemy — applying gravity and colliding with
@@ -1036,15 +1059,27 @@ class GameView(arcade.View):
 
         # "Back to last location" hazards: touching one starts the fade;
         # otherwise, standing on solid ground records the return point
-        if len(self.hazard_list) and arcade.check_for_collision_with_list(
-            self.player_sprite, self.hazard_list
-        ):
+        touched_hazards = (
+            arcade.check_for_collision_with_list(
+                self.player_sprite, self.hazard_list)
+            if len(self.hazard_list) else []
+        )
+        if touched_hazards:
             self.fade_phase = "out"
+            damage = max(getattr(h, "damage", 0) for h in touched_hazards)
+            if damage and not self.player_sprite.is_invincible:
+                self.player_sprite.take_damage(damage)
         elif self.physics_engine.can_jump() or self.player_on_platform:
             self.last_safe_pos = (self.player_sprite.center_x,
                                   self.player_sprite.center_y)
 
         self.check_enemy_collisions()
+
+        if self.player_sprite.health <= 0:
+            self.player_dead = True
+            print("You died — press R to try again")
+            return
+
         self.check_cave_entrances()
 
         # Chest in reach? (drives the "[F] Open" prompt)
@@ -1182,6 +1217,14 @@ class GameView(arcade.View):
                 arcade.key.KEY_0: 9}
 
     def on_key_press(self, key, modifiers):
+        # The death screen captures all input until the player restarts
+        if self.player_dead:
+            if key == arcade.key.R:
+                self.respawn()
+            elif key == arcade.key.ESCAPE:
+                self.open_pause_menu()
+            return
+
         # The help overlay captures all input while it is up
         if self.help_open:
             if key in (arcade.key.H, arcade.key.ESCAPE, arcade.key.ENTER,
@@ -1243,14 +1286,9 @@ class GameView(arcade.View):
             self.do_player_attack()
 
     def _swing_rect(self):
-        """The sword's hitbox: a rect in front of the player (same swing
-        as the boss fight)."""
-        p = self.player_sprite
-        if p.facing == 1:
-            left, right = p.center_x, p.right + p.attack_range
-        else:
-            left, right = p.left - p.attack_range, p.center_x
-        return left, right, p.bottom - 20, p.top + 20
+        """The sword's hitbox — the player's own attack rectangle, shared
+        with the enemy check, the boss fight and the slash that is drawn."""
+        return self.player_sprite.attack_rect()
 
     def do_player_attack(self):
         p = self.player_sprite
@@ -1273,6 +1311,39 @@ class GameView(arcade.View):
                 else:
                     print(f"Breakable wall hit — {group['health']} HP left")
                 break
+
+    def respawn(self):
+        """Restart from the current room at full health. Coins, upgrades
+        and everything already unlocked are kept."""
+        p = self.player_sprite
+        p.health = p.max_health
+        p.change_x = 0
+        p.change_y = 0
+        p.knockback_timer = 0
+        p.knockback_x = 0
+        p.dash_timer = 0
+        p.attack_timer = 0
+        p.is_attacking = False
+        if p not in self.player_list:
+            self.player_list.append(p)
+        self.player_dead = False
+        self.left_pressed = False
+        self.right_pressed = False
+        self.load_room(self.current_room)
+
+    def draw_death_screen(self):
+        w, h = self.window.width, self.window.height
+        cx = w / 2
+        arcade.draw_lrbt_rectangle_filled(0, w, 0, h, (0, 0, 0, 190))
+        arcade.draw_text("YOU DIED", cx, h / 2 + 30,
+                         arcade.color.CRIMSON_GLORY, 48,
+                         anchor_x="center", bold=True)
+        arcade.draw_text(f"Coins kept: {self.player_sprite.money}",
+                         cx, h / 2 - 15, arcade.color.GOLD, 18,
+                         anchor_x="center")
+        arcade.draw_text("R — try again        ESC — menu",
+                         cx, h / 2 - 55, arcade.color.LIGHT_GRAY, 14,
+                         anchor_x="center")
 
     def open_pause_menu(self):
         """ESC — pause and show the menu. The game view (and all its

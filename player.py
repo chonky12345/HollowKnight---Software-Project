@@ -66,7 +66,15 @@ class Player(arcade.Sprite):
             self.on_death()
     
     def on_death(self):
-        self.remove_from_sprite_lists()
+        """The player is out of health.
+
+        Deliberately does NOT remove the sprite from its sprite lists: the
+        player object is shared by the world and the boss arena, and
+        removing it from every list left the game holding an empty
+        player_list and crashing on the next frame. The views check
+        health instead and show their own death screen.
+        """
+        self.health = 0
     
     def reset_jumps(self):
         """Call when player lands"""
@@ -75,6 +83,23 @@ class Player(arcade.Sprite):
     def player_pos(self):
         return (self.center_x, self.center_y)
     
+    def attack_rect(self):
+        """The sword's hitbox: (left, right, bottom, top) of a rectangle
+        reaching attack_range in front of the player.
+
+        Everything that the swing can touch uses this one rectangle —
+        enemies, breakable walls, the boss, and the slash that is drawn on
+        screen — so the sword always hurts exactly as far as it looks.
+        (It used to damage enemies by centre-to-centre distance instead,
+        which meant a wide enemy standing inside the visible slash was not
+        hit, because its centre was further away than its edge.)
+        """
+        if self.facing == 1:
+            left, right = self.center_x, self.right + self.attack_range
+        else:
+            left, right = self.left - self.attack_range, self.center_x
+        return left, right, self.bottom - 20, self.top + 20
+
     def player_attack(self, enemy_list):
         if self.is_attacking:
             return
@@ -82,12 +107,12 @@ class Player(arcade.Sprite):
         self.is_attacking = True
         self.attack_timer = PLAYER_ATTACK_DURATION
 
+        left, right, bottom, top = self.attack_rect()
         for enemy in enemy_list:
-            dx = self.center_x - enemy.center_x
-            dy = self.center_y - enemy.center_y
-            distance = math.sqrt(dx ** 2 + dy ** 2)
-
-            if distance <= self.attack_range:
+            # Edge-based overlap, so any part of an enemy inside the swing
+            # counts as a hit
+            if (enemy.right > left and enemy.left < right
+                    and enemy.top > bottom and enemy.bottom < top):
                 enemy.take_damage(self.attack_damage)
                 if enemy.health <= 0:
                     self.money += int(ENEMY_KILL_REWARD * self.coin_mult)

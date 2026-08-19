@@ -29,11 +29,10 @@ boss_main.py does) creates a test player with dash + double jump already
 unlocked so the fight is easy to playtest on its own.
 
 Notes for integration:
-- setup() restores the player to full health (retry behaviour), and
-  re-adds them to a sprite list if they died previously.
-- The player's melee swing here is edge-aware (a sword hitbox in front
-  of the player) because the boss is too big for the centre-distance
-  check Player.player_attack() uses on slimes.
+- setup() restores the player to full health (retry behaviour).
+- The melee swing uses Player.attack_rect(), the same rectangle the
+  world and the on-screen slash use, so the sword reaches equally far
+  everywhere.
 """
 
 import arcade
@@ -304,14 +303,9 @@ class BossFightView(arcade.View):
         if self.boss.is_dead:
             return
 
-        # Sword hitbox in front of the player — edge-aware, because the
-        # boss is too big for a centre-to-centre distance check
-        if p.facing == 1:
-            ax_left, ax_right = p.center_x, p.right + p.attack_range
-        else:
-            ax_left, ax_right = p.left - p.attack_range, p.center_x
-        ay_bottom = p.bottom - 20
-        ay_top = p.top + 20
+        # The player's own swing rectangle — identical to the one used in
+        # the world and to the slash drawn on screen
+        ax_left, ax_right, ay_bottom, ay_top = p.attack_rect()
 
         b = self.boss
         if (b.right > ax_left and b.left < ax_right
@@ -341,13 +335,10 @@ class BossFightView(arcade.View):
         p = self.player_sprite
         if p.attack_timer <= 0 or p.health <= 0:
             return
-        if p.facing == 1:
-            left, right = p.right, p.right + p.attack_range
-        else:
-            left, right = p.left - p.attack_range, p.left
+        left, right, bottom, top = p.attack_rect()
         alpha = int(140 * p.attack_timer / PLAYER_ATTACK_DURATION)
         arcade.draw_lrbt_rectangle_filled(
-            left, right, p.bottom, p.top, (255, 255, 255, alpha)
+            left, right, bottom, top, (255, 255, 255, alpha)
         )
 
     def _draw_hud(self):
