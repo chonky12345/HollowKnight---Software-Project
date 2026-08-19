@@ -59,9 +59,17 @@ ENEMY_TIERS = {
     },
 }
 
-# Which variant spawns on each level (levels beyond the list reuse the last)
+# Which variant spawns on each level. The game is exactly this many levels
+# long — beating the boss on the final one finishes the game.
 LEVEL_ENEMIES = ["green", "orange"]
 LEVEL_NAMES = ["Level 1", "Level 2"]
+FINAL_LEVEL = len(LEVEL_ENEMIES)
+
+# Level 2 does NOT take your upgrades away. Instead every repeatable
+# upgrade gains a fresh set of levels and prices are inflated, so the shop
+# is worth using again: what you own still works, it is just no longer
+# enough on its own.
+SHOP_LEVEL_PRICE_MULT = 3.0
 ENEMY_ATTACK_DURATION = 30  # frames
 ENEMY_SPAWN_TIMER_MIN = 5   # seconds
 ENEMY_SPAWN_TIMER_MAX = 10  # seconds
@@ -120,13 +128,13 @@ SHOP_ITEMS = [
      "desc": "+50 max health, and heals you full"},
     {"key": "damage",      "name": "Sharpened Blade", "price": [60, 110, 160], "levels": 3,
      "desc": "+10 sword damage"},
-    {"key": "range",       "name": "Long Blade",      "price": 70,
+    {"key": "range",       "name": "Long Blade",      "price": 70, "repeatable": True,
      "desc": "+30 sword reach"},
     {"key": "speed",       "name": "Swift Boots",     "price": [45, 90], "levels": 2,
      "desc": "+1.5 move speed"},
     {"key": "quick_step",  "name": "Quick Step",      "price": 65,
      "desc": "dash cooldown halved"},
-    {"key": "lucky",       "name": "Lucky Charm",     "price": 100,
+    {"key": "lucky",       "name": "Lucky Charm",     "price": 100, "repeatable": True,
      "desc": "+50% coins from kills"},
     {"key": "heal",        "name": "Bandages",        "price": 25, "consumable": True,
      "desc": "restore to full health"},
@@ -151,9 +159,10 @@ HELP_TIPS = [
     "A doorway shows a [F] Enter prompt when you are standing in it.",
     "Cracked walls can be broken by hitting them a few times with SPACE.",
     "Chests hold coins — deeper, better hidden rooms hold far more.",
-    "Spikes are instant death — everything else just returns you to safe ground.",
+    "Spikes are instant death — you restart the level, keeping coins and upgrades.",
     "Buy the Dash before the boss: dashing through attacks avoids damage.",
-    "Beating the boss starts the next level: same world, far tougher slimes.",
+    "Beating the boss starts level 2: same world, orange slimes, a new boss.",
+    "Level 2 does not reset your upgrades — the shop just opens more levels.",
 ]
 
 # Viewport margins
@@ -389,6 +398,20 @@ BOSS_BEAM_THICKNESS   = 26
 # a threshold)
 BOSS_STAGGER_FRAMES = 55
 
+# Throw (the orange boss's signature): it hurls a heavy boulder in a high
+# arc; wherever the boulder lands it bursts into fragments that spray
+# outward along the ground. Unlike spit, the arc is slow and readable but
+# the burst punishes standing where it lands.
+BOSS_THROW_DAMAGE        = 25
+BOSS_THROW_SPEED         = 9      # horizontal speed of the boulder
+BOSS_THROW_LIFT          = 13     # upward launch speed
+BOSS_THROW_GRAVITY       = 0.42
+BOSS_THROW_RADIUS        = 20
+BOSS_FRAGMENT_COUNT      = 6
+BOSS_FRAGMENT_DAMAGE     = 12
+BOSS_FRAGMENT_SPEED      = 6
+BOSS_FRAGMENT_LIFETIME   = 55
+
 # The boss's phases, in order. Each activates once health drops to that
 # fraction of max ("until_health" = phase lasts while health is ABOVE it).
 #   speed            — multiplies walk/charge speed
@@ -398,6 +421,23 @@ BOSS_STAGGER_FRAMES = 55
 #   leap_repeats     — slams chained back-to-back
 #   attacks_far/near — attack pool rolled from, by distance to the player
 #                      (repeat an entry to weight it higher)
+# One boss per level. Level 2's guardian is the orange slime: tougher, and
+# it fights differently — it throws boulders instead of spitting, and
+# keeps the beams from the first fight's final phase throughout.
+BOSS_VARIANTS = {
+    "green": {
+        "art": "green", "scale": 0.80, "health": 1000,     # about 243 x 162 px
+        "name": "CAVE GUARDIAN",
+    },
+    "orange": {
+        "art": "orange", "scale": 0.62, "health": 1700,    # about 285 x 179 px
+        "name": "MOLTEN GUARDIAN",
+        # Attack pools that replace the phase defaults for this boss
+        "attacks_far":  ["throw", "throw", "charge", "rain", "beam"],
+        "attacks_near": ["throw", "leap", "leap", "beam", "charge"],
+    },
+}
+
 BOSS_PHASES = [
     {   # Phase 1 — the warm-up: slow, single attacks
         "until_health": 0.65,

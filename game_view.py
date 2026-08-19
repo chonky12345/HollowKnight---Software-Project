@@ -94,6 +94,7 @@ class GameView(arcade.View):
         # upgrade and coin they earned. See advance_level().
         self.level = 1
         self.level_banner = 0          # frames left showing the "Level N" title
+        self.game_won = False          # beat the boss on the final level
 
     # ────────────────────────────────────────────────────────────────────────
     def setup(self):
@@ -504,6 +505,8 @@ class GameView(arcade.View):
             self.draw_help()
         if self.player_dead:
             self.draw_death_screen()
+        if self.game_won:
+            self.draw_win_screen()
 
         # Hazard teleport fade — drawn over everything
         if self.fade_alpha > 0:
@@ -625,7 +628,7 @@ class GameView(arcade.View):
 
         for i, item in enumerate(SHOP_ITEMS):
             y = top - 75 - i * row_h
-            level, max_level, price, buyable = self.item_state(p, item)
+            level, max_level, price, buyable = self.item_state(item)
 
             if not buyable and not item.get("consumable", False):
                 status, color = "OWNED", arcade.color.LIGHT_GREEN
@@ -659,7 +662,7 @@ class GameView(arcade.View):
     def on_update(self, delta_time):
 
         # Shop, help or the death screen = game paused
-        if self.shop_open or self.help_open or self.player_dead:
+        if self.shop_open or self.help_open or self.player_dead or self.game_won:
             return
 
         # Hazard fade in progress = world frozen while the screen blinks
@@ -963,6 +966,7 @@ class GameView(arcade.View):
         fight = BossFightView(
             player=self.player_sprite,
             on_finish=lambda outcome: self.end_boss_fight(origin, outcome),
+            variant=self.enemy_variant,      # level 2 fights the orange one
         )
         fight.setup()
         self.window.show_view(fight)
@@ -974,7 +978,7 @@ class GameView(arcade.View):
             # Beating the boss is the end of a level — start the next one
             self.player_sprite.health = self.player_sprite.max_health
             self.window.show_view(self)
-            self.advance_level()
+            self.advance_level()      # or finishes the game on the last level
             return
         # Never drop the player back into the world dead
         if self.player_sprite.health <= 0:
@@ -992,6 +996,14 @@ class GameView(arcade.View):
                 arcade.key.KEY_0: 9}
 
     def on_key_press(self, key, modifiers):
+        # The win screen captures all input until a new run is started
+        if self.game_won:
+            if key == arcade.key.R:
+                self.restart_game()
+            elif key == arcade.key.ESCAPE:
+                self.open_pause_menu()
+            return
+
         # The death screen captures all input until the player restarts
         if self.player_dead:
             if key == arcade.key.R:
@@ -1104,7 +1116,15 @@ class GameView(arcade.View):
         they already know become a real fight. The world itself is reset —
         walls unbroken, chests refilled, the boss waiting again — so there
         is a full run to play rather than an emptied-out map.
+
+        The game is FINAL_LEVEL levels long; clearing the last one finishes
+        it rather than looping into an endless run of identical levels.
         """
+        if self.level >= FINAL_LEVEL:
+            self.game_won = True
+            print("=== You beat the game! ===")
+            return
+
         self.level += 1
         self.broken_rooms = set()
         self.opened_chests = set()
@@ -1130,7 +1150,44 @@ class GameView(arcade.View):
         self.player_dead = False
         self.left_pressed = False
         self.right_pressed = False
-        self.load_room(self.current_room)
+        # Dying sends you back to the very start of the level, not to the
+        # room you died in — spikes and slimes both mean starting the run
+        # over. Coins and upgrades are kept.
+        self.load_room(STARTING_ROOM)
+
+    def draw_win_screen(self):
+        w, h = self.window.width, self.window.height
+        cx = w / 2
+        arcade.draw_lrbt_rectangle_filled(0, w, 0, h, (0, 0, 0, 200))
+        arcade.draw_text("YOU WIN", cx, h / 2 + 50, arcade.color.GOLD, 52,
+                         anchor_x="center", bold=True)
+        arcade.draw_text(f"Both levels cleared — {self.player_sprite.money} coins earned",
+                         cx, h / 2 - 5, arcade.color.WHITE_SMOKE, 18,
+                         anchor_x="center")
+        arcade.draw_text("R — play again from level 1        ESC — menu",
+                         cx, h / 2 - 50, arcade.color.LIGHT_GRAY, 14,
+                         anchor_x="center")
+
+    def restart_game(self):
+        """Start a completely fresh run from level 1."""
+        p = self.player_sprite
+        self.level = 1
+        self.game_won = False
+        self.player_dead = False
+        self.broken_rooms = set()
+        self.opened_chests = set()
+        self.boss_defeated = False
+        p.money = 0
+        p.upgrades = {}
+        p.has_dash = p.has_double_jump = p.has_wall_jump = False
+        p.max_health = PLAYER_MAX_HEALTH
+        p.attack_damage = PLAYER_ATTACK_DAMAGE
+        p.attack_range = PLAYER_ATTACK_RANGE
+        p.move_speed = PLAYER_MOVEMENT_SPEED
+        p.dash_cooldown_frames = DASH_COOLDOWN
+        p.coin_mult = 1.0
+        p.health = p.max_health
+        self.load_room(STARTING_ROOM)
 
     def draw_death_screen(self):
         w, h = self.window.width, self.window.height
@@ -1220,14 +1277,32 @@ class GameView(arcade.View):
         p.dash_cooldown_timer = p.dash_cooldown_frames
 
     # ── Shop ────────────────────────────────────────────────────────────
-    @staticmethod
-    def item_state(player, item):
-        """(level, max_level, price, buyable) for a SHOP_ITEMS entry."""
+    def item_state(self, item):
+        """(level, max_level, price, buyable) for a SHOP_ITEMS entry.
+
+        On later levels nothing the player owns is taken away. Instead,
+        repeatable upgrades gain another full set of levels and every price
+        is inflated by SHOP_LEVEL_PRICE_MULT per level — so the shop is
+        worth using again, and what you already bought is a head start
+        rather than the finished article.
+        """
+        player = self.player_sprite
         level = player.upgrades.get(item["key"], 0)
-        max_level = item.get("levels", 1)
+        base_levels = item.get("levels", 1)
+        repeatable = item.get("repeatable", False) or base_levels > 1
         consumable = item.get("consumable", False)
+
+        max_level = base_levels * self.level if repeatable else base_levels
+
         prices = item["price"] if isinstance(item["price"], list) else [item["price"]]
-        price = prices[min(level, len(prices) - 1)]
+        if consumable:
+            # No levels to climb, so inflate by the level the player is on
+            block = self.level - 1
+            price = prices[0]
+        else:
+            block = level // base_levels          # which set of levels
+            price = prices[min(level % base_levels, len(prices) - 1)]
+        price = int(round(price * (SHOP_LEVEL_PRICE_MULT ** block)))
 
         buyable = consumable or level < max_level
         if item["key"] == "heal" and player.health >= player.max_health:
@@ -1239,7 +1314,7 @@ class GameView(arcade.View):
             return
         item = SHOP_ITEMS[index]
         p = self.player_sprite
-        level, max_level, price, buyable = self.item_state(p, item)
+        level, max_level, price, buyable = self.item_state(item)
         if not buyable or p.money < price:
             return
 

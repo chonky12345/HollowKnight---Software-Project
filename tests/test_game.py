@@ -272,8 +272,9 @@ def main():
     view.on_key_press(arcade.key.R, 0)
     assert not view.player_dead
     assert player.health == player.max_health
+    assert view.current_room == STARTING_ROOM     # back to the very start
     view.on_update(1 / 60)
-    check("R respawns at full health and the game runs again")
+    check("R respawns at full health, back at the start of the level")
 
     # ── Test 6: shop ────────────────────────────────────────────────────
     section("Shop")
@@ -339,6 +340,37 @@ def main():
     window.switch_to()
     view.on_draw()
     check("level 2 keeps every upgrade, resets the world, spawns orange slimes")
+
+    # Shop inflation: nothing is taken away, but there is more to buy
+    item_index = {item["key"]: i for i, item in enumerate(SHOP_ITEMS)}
+    player.money = 100000
+    view.level = 1
+    for key in ("vitality", "damage", "range", "speed", "lucky"):
+        while view.item_state(SHOP_ITEMS[item_index[key]])[3]:
+            view.try_buy(item_index[key])
+    maxed_health, maxed_damage = player.max_health, player.attack_damage
+    for key in ("vitality", "damage", "range", "speed", "lucky"):
+        assert not view.item_state(SHOP_ITEMS[item_index[key]])[3], key
+    check("every repeatable upgrade can be maxed out on level 1")
+
+    view.level = 2
+    for key in ("vitality", "damage", "range", "speed", "lucky"):
+        level, max_level, price, buyable = view.item_state(SHOP_ITEMS[item_index[key]])
+        assert buyable, key                       # a new set of levels opened
+        assert max_level > level
+    v_level, _, v_price, _ = view.item_state(SHOP_ITEMS[item_index["vitality"]])
+    assert v_price == int(SHOP_ITEMS[item_index["vitality"]]["price"][0]
+                          * SHOP_LEVEL_PRICE_MULT)
+    assert view.item_state(SHOP_ITEMS[item_index["dash"]])[1] == 1   # still one-time
+    view.try_buy(item_index["vitality"])
+    view.try_buy(item_index["damage"])
+    assert player.max_health > maxed_health and player.attack_damage > maxed_damage
+    check(f"level 2 opens more upgrade levels at {SHOP_LEVEL_PRICE_MULT:g}x the price, "
+          f"keeping what you own")
+
+    # Later tests expect a normal mid-game state
+    view.level = 1
+    view.game_won = False
 
     # ── Test 7: boss fight ──────────────────────────────────────────────
     section("Boss fight")
@@ -423,7 +455,8 @@ def main():
     fight.boss.on_death()
     fight.on_update(1 / 60)
     assert fight.fight_over == "victory"
-    assert player.money == coins_before + BOSS_KILL_REWARD
+    # The Lucky Charm bought earlier multiplies every reward
+    assert player.money == coins_before + int(BOSS_KILL_REWARD * player.coin_mult)
     fight.on_key_press(arcade.key.ENTER, 0)
     assert window.current_view is view
     # Beating the boss finishes the level and starts the next one
@@ -432,6 +465,24 @@ def main():
     assert player.health == player.max_health
     assert not view.boss_defeated          # the next boss is waiting again
     check("winning pays the reward and starts the next level")
+
+    view.level = FINAL_LEVEL
+    view.game_won = False
+    view.advance_level()
+    assert view.game_won and view.level == FINAL_LEVEL
+    window.switch_to()
+    view.on_draw()
+    view.on_key_press(arcade.key.E, 0)            # win screen swallows input
+    assert not view.shop_open
+    check(f"the game ends after level {FINAL_LEVEL} instead of looping forever")
+
+    player.money = 999
+    player.has_dash = True
+    view.on_key_press(arcade.key.R, 0)
+    assert view.level == 1 and not view.game_won
+    assert player.money == 0 and not player.has_dash
+    assert view.current_room == STARTING_ROOM
+    check("R after winning starts a completely fresh run")
 
     view.load_room("vertical_shaft")
     view.help_open = False
@@ -453,6 +504,40 @@ def main():
     assert view.shop_open
     view.on_key_press(arcade.key.E, 0)
     check("losing the boss fight returns you to a world that still works")
+
+    # ── Test 7c: the level 2 boss ───────────────────────────────────────
+    section("The level 2 boss")
+    view.load_room("vertical_shaft")
+    view.help_open = False
+    view.level = 2
+    view.boss_defeated = False
+    use_door("boss_fight")
+    fight = window.current_view
+    assert fight.boss.variant == "orange"
+    assert fight.boss.boss_name == BOSS_VARIANTS["orange"]["name"]
+    assert fight.boss.max_health > BOSS_VARIANTS["green"]["health"]
+    check(f"level 2 fights the {fight.boss.boss_name.title()}, "
+          f"{fight.boss.max_health} HP against "
+          f"{BOSS_VARIANTS['green']['health']}")
+
+    pool = set(fight.boss.phase_config["attacks_far"]
+               + fight.boss.phase_config["attacks_near"])
+    assert "throw" in pool and "spit" not in pool
+    check(f"its attacks differ from the first boss: {sorted(pool)}")
+
+    fight.projectile_list.clear()
+    fight.boss.next_attack = "throw"
+    fight.boss._launch_attack(player)
+    boulders = [x for x in fight.projectile_list if getattr(x, "bursts", False)]
+    assert len(boulders) == 1
+    assert boulders[0].damage == BOSS_THROW_DAMAGE
+    before = len(fight.projectile_list)
+    fight.boss.burst_boulder(boulders[0])
+    assert len(fight.projectile_list) - before == BOSS_FRAGMENT_COUNT
+    check(f"a thrown boulder bursts into {BOSS_FRAGMENT_COUNT} fragments where it lands")
+
+    window.show_view(view)
+    view.level = 1
 
     # ── Test 8: menus and help ──────────────────────────────────────────
     section("Menus and help")

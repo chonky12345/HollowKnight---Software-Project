@@ -1,9 +1,10 @@
 import arcade
+import glob
 import math
 import random
 
 from constants import *
-from enemy import Enemy
+from enemy import Enemy, Slime
 
 
 class BossProjectile(arcade.SpriteCircle):
@@ -112,15 +113,26 @@ class Boss(Enemy):
         "spit":   (120, 255, 120),
         "rain":   (120, 180, 255),
         "beam":   (255, 160, 60),
+        "throw":  (255, 110, 40),
     }
 
     def __init__(self, x, y, projectile_list, beam_list=None,
-                 arena_width=BOSS_ARENA_WIDTH, arena_height=BOSS_ARENA_HEIGHT):
+                 arena_width=BOSS_ARENA_WIDTH, arena_height=BOSS_ARENA_HEIGHT,
+                 variant="green"):
         super().__init__(x, y)
-        self.texture = arcade.load_texture(resource_path("Assets/enemy.png"))
-        self.scale = BOSS_SCALING
-        self.health = BOSS_MAX_HEALTH
-        self.max_health = BOSS_MAX_HEALTH
+
+        self.variant = variant
+        spec = BOSS_VARIANTS[variant]
+        self.spec = spec
+        self.boss_name = spec["name"]
+        self.frames = Slime.load_animation(spec["art"])
+        self.texture = self.frames[0]
+        self.scale = spec["scale"]
+        self.frame_index = 0.0
+        self._pinned_hit_box = self.hit_box
+
+        self.health = spec["health"]
+        self.max_health = spec["health"]
         self.projectile_list = projectile_list
         self.beam_list = beam_list if beam_list is not None else arcade.SpriteList()
         # Rain and beams span the arena, so the boss is told how big it is
@@ -152,7 +164,12 @@ class Boss(Enemy):
 
     @property
     def phase_config(self):
-        return BOSS_PHASES[self.phase - 1]
+        """This phase's settings, with any per-boss attack pools applied."""
+        cfg = dict(BOSS_PHASES[self.phase - 1])
+        for key in ("attacks_far", "attacks_near"):
+            if key in self.spec:
+                cfg[key] = self.spec[key]
+        return cfg
 
     def take_damage(self, amount):
         self.hit_flash_timer = 6
@@ -178,6 +195,11 @@ class Boss(Enemy):
         # Ticks the contact-attack + hit-flash timers; _update_tint below
         # overrides the colour Enemy.update sets
         super().update(player)
+
+        if self.frames:
+            self.frame_index += ENEMY_ANIMATION_FPS * (1 / 60)
+            self.texture = self.frames[int(self.frame_index) % len(self.frames)]
+            self.hit_box = self._pinned_hit_box
 
         if player is None or self.is_dead:
             return
@@ -310,6 +332,10 @@ class Boss(Enemy):
             self._fire_beams(player)
             self._start_recover(BOSS_RECOVER_FRAMES)
 
+        elif self.next_attack == "throw":
+            self._throw_boulder(player)
+            self._start_recover(BOSS_RECOVER_FRAMES)
+
     def _launch_leap(self, player):
         self.state = "leap"
         self.was_airborne = False
@@ -367,6 +393,36 @@ class Boss(Enemy):
                 color=arcade.color.CORNFLOWER_BLUE,
                 gravity=BOSS_RAIN_GRAVITY,
                 lifetime=300,
+            ))
+
+    def _throw_boulder(self, player):
+        """Hurl a boulder on a high arc at the player. It bursts into
+        ground-hugging fragments wherever it lands — see BossProjectile
+        and the view's wall handling."""
+        direction = 1 if player.center_x > self.center_x else -1
+        distance = abs(player.center_x - self.center_x)
+        # Aim the arc so it lands near the player rather than a fixed range
+        speed = min(BOSS_THROW_SPEED, max(3.0, distance / 26))
+
+        boulder = BossProjectile(
+            self.center_x + direction * 30, self.center_y + 20,
+            direction * speed, BOSS_THROW_LIFT,
+            damage=BOSS_THROW_DAMAGE, radius=BOSS_THROW_RADIUS,
+            color=(160, 90, 50), gravity=BOSS_THROW_GRAVITY,
+        )
+        boulder.bursts = True          # the view shatters it on impact
+        self.projectile_list.append(boulder)
+
+    def burst_boulder(self, boulder):
+        """Replace a landed boulder with a spray of fragments."""
+        for i in range(BOSS_FRAGMENT_COUNT):
+            spread = (i / max(1, BOSS_FRAGMENT_COUNT - 1)) * 2 - 1   # -1..1
+            self.projectile_list.append(BossProjectile(
+                boulder.center_x, boulder.center_y + 6,
+                spread * BOSS_FRAGMENT_SPEED, abs(spread) * 3 + 2,
+                damage=BOSS_FRAGMENT_DAMAGE, radius=8,
+                color=(230, 140, 60), gravity=BOSS_THROW_GRAVITY,
+                lifetime=BOSS_FRAGMENT_LIFETIME,
             ))
 
     def _fire_beams(self, player):

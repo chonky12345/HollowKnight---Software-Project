@@ -48,10 +48,11 @@ BACKGROUND_COLOR = (24, 22, 30)
 
 
 class BossFightView(arcade.View):
-    def __init__(self, player=None, on_finish=None):
+    def __init__(self, player=None, on_finish=None, variant="green"):
         super().__init__()
         self.external_player = player
         self.on_finish = on_finish
+        self.variant = variant
 
         self.player_list = None
         self.boss_list = None
@@ -126,7 +127,7 @@ class BossFightView(arcade.View):
         self.projectile_list = arcade.SpriteList()
         self.beam_list = arcade.SpriteList()
         self.boss = Boss(0, 0, self.projectile_list, self.beam_list,
-                         arena_width=W, arena_height=H)
+                         arena_width=W, arena_height=H, variant=self.variant)
         self.boss.center_x = (W - 220) if p.center_x < W / 2 else 220
         self.boss.center_y = p.center_y
         self._drop_to_ground(self.boss)
@@ -255,6 +256,9 @@ class BossFightView(arcade.View):
             if proj.dies_on_wall and arcade.check_for_collision_with_list(
                 proj, self.wall_list
             ):
+                # A thrown boulder bursts into fragments where it lands
+                if getattr(proj, "bursts", False):
+                    self.boss.burst_boulder(proj)
                 proj.remove_from_sprite_lists()
 
         if p.health > 0 and p.knockback_timer <= 0 and not p.is_invincible:
@@ -393,7 +397,7 @@ class BossFightView(arcade.View):
         arcade.draw_lrbt_rectangle_outline(left, left + bar_w, 24, 24 + bar_h,
                                            arcade.color.WHITE_SMOKE, 2)
 
-        title = "CAVE GUARDIAN"
+        title = self.boss.boss_name
         if self.boss.phase == len(BOSS_PHASES):
             title += "  —  ENRAGED"
         elif self.boss.phase > 1:
