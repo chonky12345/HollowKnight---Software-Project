@@ -32,12 +32,9 @@ BUTTON_STYLE = {
 
 
 class MenuView(arcade.View):
-    """
-    Doubles as the main menu and the pause menu:
-      MenuView()                — main menu ("Play" starts a fresh game)
-      MenuView(game_view=view)  — pause menu ("Resume" returns to the game,
-                                  which is frozen while the menu is up;
-                                  ESC also resumes)
+    """Doubles as the main menu and the pause menu: MenuView() — main menu
+    ("Play" starts a fresh game) MenuView(game_view=view) — pause menu
+    ("Resume"…
     """
 
     def __init__(self, game_view=None):
@@ -45,7 +42,7 @@ class MenuView(arcade.View):
         self.game_view = game_view
 
         self.background = arcade.load_texture(
-            resource_path("Assets/menu_background.png"))
+            resource_path("Assets/ui/menu_background.png"))
         self.time = 0.0
 
         # Drifting ember particles for a bit of life

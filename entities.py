@@ -5,7 +5,6 @@ from constants import resource_path
 
 # ============================================================
 # PARENT CLASS
-# ============================================================
 
 class Entity(arcade.Sprite):
     def __init__(self, name, x=0, y=0):
@@ -20,7 +19,6 @@ class Entity(arcade.Sprite):
 
 # ============================================================
 # WALL  (hitbox only — visuals handled by tileset)
-# ============================================================
 
 class Wall(Entity):
     TILE_SIZE = 16
@@ -34,16 +32,11 @@ class Wall(Entity):
 
         # Ogmo "Walls" entities are usually resizable rectangles — if you
         # drew a wide platform in the editor, its real width/height can be
-        # much bigger than one tile. Falling back to TILE_SIZE only
-        # happens if the entity data genuinely has no width/height.
         w = width or self.TILE_SIZE
         h = height or self.TILE_SIZE
 
         # A bare arcade.Sprite() has texture=None, which breaks
         # width/height and hit-box calculation (used by the spatial hash
-        # and the physics engine) — walls silently get no collision shape
-        # at all. This texture is fully transparent; the tileset layer
-        # still handles all the visuals.
         key = (w, h)
         texture = Wall._hitbox_textures.get(key)
         if texture is None:
@@ -60,7 +53,6 @@ class Wall(Entity):
 
 # ============================================================
 # PLAYER SPAWNER  (not drawn — just stores spawn position)
-# ============================================================
 
 class PlayerSpawner(Entity):
     def __init__(self, x, y):
@@ -69,7 +61,6 @@ class PlayerSpawner(Entity):
 
 # ============================================================
 # CHEST  (visible; no open/loot behaviour yet)
-# ============================================================
 
 class Chest(Entity):
     WORLD_WIDTH = 96   # px the chest art is scaled to in-game
@@ -81,7 +72,7 @@ class Chest(Entity):
         super().__init__("chest", x, y)
 
         if Chest._texture is None:
-            Chest._texture = arcade.load_texture(resource_path("Assets/chest.png"))
+            Chest._texture = arcade.load_texture(resource_path("Assets/sprites/chest.png"))
         self.texture = Chest._texture
         self.scale = self.WORLD_WIDTH / Chest._texture.width
 
@@ -101,7 +92,6 @@ class Chest(Entity):
 
 # ============================================================
 # CAVE ENTRANCE  (trigger zone)
-# ============================================================
 
 class CaveEntrance(Entity):
     TILE_SIZE = 8
@@ -113,8 +103,6 @@ class CaveEntrance(Entity):
         self.entrance_id = entrance_id
         # Optional per-instance "door_id" custom Value set in Ogmo Editor —
         # lets a door be matched by name instead of by position. Empty
-        # string if the map hasn't been tagged (or the field doesn't exist
-        # in the Ogmo project yet).
         self.door_tag = door_tag
 
         if CaveEntrance._hitbox_texture is None:

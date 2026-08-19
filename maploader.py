@@ -1,12 +1,4 @@
-"""
-Loading an Ogmo level into sprite lists.
-
-Both the world (game_view.py) and the boss arena (boss_fight_view.py) show
-Ogmo maps, so all of the parsing lives here rather than being written
-twice. Callers take whichever lists they care about: the arena only needs
-the tile art, the walls and the platforms, while the world also uses the
-chests, doorways and hazards.
-"""
+"""Loading an Ogmo level into sprite lists."""
 
 import json
 
@@ -18,8 +10,6 @@ from entities import Wall, PlayerSpawner, CaveEntrance, Chest
 
 # Sliced tile textures are cached across every room so switching rooms
 # never re-slices a tileset that has already been used. Without this each
-# tile cell allocated its own texture even when many cells share the same
-# art, which exhausted the texture atlas' fixed slot count.
 _spritesheet_cache = {}
 _tile_texture_cache = {}
 
@@ -30,15 +20,7 @@ def _pad_rect(x, y, w, h, pad):
 
 
 def new_tile_atlas(ctx):
-    """
-    A texture atlas for ONE room's tile art.
-
-    Rooms are painted as full-coverage mosaics with almost no repeated tile
-    IDs, so each needs several thousand distinct textures. A single shared
-    atlas overflowed once the player had toured five or six rooms, and the
-    next room silently failed to render. Only one room is ever on screen,
-    so each load gets its own atlas and the previous one is released.
-    """
+    """A texture atlas for ONE room's tile art."""
     return arcade.DefaultTextureAtlas(
         size=(512, 512), border=2, auto_resize=True, ctx=ctx, capacity=4
     )
@@ -53,10 +35,8 @@ def _get_spritesheet(tileset_path):
 
 
 def _get_tile_texture(tileset_path, sheet, tile_id, tiles_per_row, tile_w, tile_h):
-    """
-    Slice one tile from a SpriteSheet using Arcade 3.x LRBT rects, cached by
-    (tileset_path, tile_id). Ogmo image coords put (0,0) at the top-left,
-    and LRBT bottom/top are image-space pixels from the top.
+    """Slice one tile from a SpriteSheet using Arcade 3.x LRBT rects,
+    cached by (tileset_path, tile_id).
     """
     key = (tileset_path, tile_id)
     texture = _tile_texture_cache.get(key)
@@ -134,7 +114,6 @@ def load_ogmo_map(filepath, ctx, chest_coins=CHEST_COINS):
         if "tileset" in layer:
             # Tile art, rendered generically whatever the layer is called.
             # Ogmo writes layers top-first, so each is INSERTED at the
-            # front (drawn first = furthest back).
             if "data2D" not in layer and "data" not in layer:
                 print(f"NOTE: tile layer {name!r} uses an unsupported export "
                       f"format and was not rendered.")
@@ -166,7 +145,6 @@ def load_ogmo_map(filepath, ctx, chest_coins=CHEST_COINS):
         elif name == "PassableWalls":
             # One-way "jump-through" platforms — solid from above only.
             # Deliberately NOT walls, so the physics engine treats them as
-            # open air; landing on them is resolved by the view.
             for ent in layer["entities"]:
                 result.platform_list.append(Wall(*entity_rect(ent)))
 

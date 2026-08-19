@@ -26,7 +26,6 @@ class GameView(arcade.View):
 
         # One SpriteList per tile-art layer, in draw order (background
         # first). Built generically from whatever tile layers the map
-        # has — layer names don't matter, only their tileset label.
         self.tile_layers = []
 
         self.player_sprite  = None
@@ -64,7 +63,6 @@ class GameView(arcade.View):
 
         # Breakable wall state. Groups are blobs of adjacent BreakableWalls
         # tiles sharing one health pool; broken_rooms remembers which rooms
-        # have had their wall smashed (so re-entering loads "broken_map").
         self.breakable_groups = []
         self.broken_rooms = set()
 
@@ -80,7 +78,6 @@ class GameView(arcade.View):
 
         # "Back to last location" hazard state. last_safe_pos is refreshed
         # every frame the player stands on solid ground away from hazards;
-        # touching a hazard fades to black, teleports there, fades back.
         self.hazard_list = None
         self.last_safe_pos = None
         self.fade_phase = None         # None / "out" / "in"
@@ -92,7 +89,6 @@ class GameView(arcade.View):
 
         # Level. Beating the boss starts the next one: the same maps are
         # replayed with a tougher enemy variant, and the player keeps every
-        # upgrade and coin they earned. See advance_level().
         self.level = 1
         self.level_banner = 0          # frames left showing the "Level N" title
         self.game_won = False          # beat the boss on the final level
@@ -104,10 +100,10 @@ class GameView(arcade.View):
         self.levels_cleared = 0
         self.deaths = 0
         self.coins_spent = 0
+        self.boss_defeat_loss = 0      # coins lost to the last boss defeat
 
         # Autosaving stays off until setup() has finished. Otherwise
         # creating a GameView in order to LOAD a save would immediately
-        # overwrite that save with a brand-new game.
         self.autosave_enabled = False
 
     # ────────────────────────────────────────────────────────────────────────
@@ -126,13 +122,8 @@ class GameView(arcade.View):
 
     # ────────────────────────────────────────────────────────────────────────
     def load_room(self, room_key, spawn_pos=None, origin_room=None):
-        """
-        Load a room's map and collision, place the player, and rebuild
-        physics. Spawn priority: explicit spawn_pos > the door in this room
-        leading back to origin_room (so bidirectional doors need no spawn
-        coords at all) > the map's Player Spawner > the default start.
-        Player stats (health, money, abilities) live on player_sprite and
-        survive room changes.
+        """Load a room's map and collision, place the player, and rebuild
+        physics.
         """
         room = ROOMS[room_key]
         self.current_room = room_key
@@ -177,8 +168,6 @@ class GameView(arcade.View):
 
         # Different maps of the "same" place can sit a tile apart (e.g. the
         # broken cave's floors are 16px higher than the original's). If the
-        # spawn leaves the player's feet slightly inside a platform, lift
-        # them onto it instead of letting them fall through.
         for plat in arcade.check_for_collision_with_list(
             self.player_sprite, self.platform_list
         ):
@@ -271,11 +260,8 @@ class GameView(arcade.View):
 
     # ────────────────────────────────────────────────────────────────────────
     def _compute_surface_walls(self):
-        """
-        A wall or platform tile counts as a valid spawn point if there's no
-        other wall/platform tile directly above it — i.e. it's a walkable
-        surface with open air above, not buried underground or stacked
-        under another platform.
+        """A wall or platform tile counts as a valid spawn point if there's
+        no other wall/platform tile directly above it — i.e.
         """
         all_tiles = list(self.wall_list) + list(self.platform_list)
         occupied = {(round(t.center_x), round(t.center_y)) for t in all_tiles}
@@ -285,13 +271,7 @@ class GameView(arcade.View):
         ]
 
     def _build_cave_doors(self):
-        """
-        Group adjacent "cave entrance" tiles into logical doors. A door drawn
-        in the editor is really a blob of small entrance tiles touching each
-        other; each blob gets one centre point, which is what the TRANSITIONS
-        entries in constants.py are matched against (by distance). Tile ids
-        are NOT used — they change whenever the map is edited.
-        """
+        """Group adjacent "cave entrance" tiles into logical doors."""
         self.cave_doors = []
         self.door_of_sprite = {}
         unvisited = set(self.cave_entrance_list)
@@ -317,8 +297,6 @@ class GameView(arcade.View):
 
             # If any tile in the blob was tagged with a "door_id" custom
             # Value in Ogmo, that's the door's identity — more robust than
-            # position, since it survives the door being resized/nudged.
-            # Untagged maps just get "" and fall back to position matching.
             tags = [s.door_tag for s in cluster if s.door_tag]
             tag = max(set(tags), key=tags.count) if tags else ""
 
@@ -354,10 +332,9 @@ class GameView(arcade.View):
                           f'"spawn": (x, y)}},')
 
     def _build_breakable_groups(self):
-        """
-        Blobs of adjacent BreakableWalls tiles become one breakable wall
+        """Blobs of adjacent BreakableWalls tiles become one breakable wall
         with a shared health pool — so the whole wall breaks together
-        after a few sword hits instead of tile by tile.
+        after a few sword hits…
         """
         self.breakable_groups = []
         unvisited = set(self.breakable_list)
@@ -400,18 +377,14 @@ class GameView(arcade.View):
 
         # If the room has a broken-variant map, remember it and reload in
         # place (art swaps to the open passage; player keeps their spot).
-        # Rooms without a variant just lose the collision.
         if "broken_map" in ROOMS[self.current_room]:
             self.broken_rooms.add(self.current_room)
             p = self.player_sprite
             self.load_room(self.current_room, spawn_pos=(p.center_x, p.center_y))
 
     def _settle_chests(self):
-        """
-        Rest each chest on the solid ground beneath where it was placed in
-        the editor. Decorative ledges painted into the room art have no
-        collision, so a chest placed on one would float — instead it drops
-        to the real floor below.
+        """Rest each chest on the solid ground beneath where it was placed
+        in the editor.
         """
         solids = list(self.wall_list) + list(self.platform_list)
         for chest in self.chest_list:
@@ -422,18 +395,7 @@ class GameView(arcade.View):
                 chest.bottom = max(tops)
 
     def _door_transition(self, door):
-        """
-        The TRANSITIONS entry for this door.
-
-        Tagged doors (door_id set in Ogmo) match ONLY by tag — first an
-        explicit {"id": ...} entry, else the tag itself is taken as the
-        destination room key ("name the door after the room it leads to
-        and it just works"). They never fall back to position matching,
-        so a tagged door can't be hijacked by a nearby "door" entry.
-
-        Untagged doors match the nearest "door" point within
-        DOOR_MATCH_RADIUS. None = unconfigured.
-        """
+        """The TRANSITIONS entry for this door."""
         entries = TRANSITIONS.get(self.current_room, [])
 
         if door["tag"]:
@@ -460,7 +422,6 @@ class GameView(arcade.View):
     def open_chest(self, chest):
         # Guard + clear the prompt immediately: active_chest is otherwise
         # only refreshed on the next update, so two key presses inside one
-        # frame would pay out twice
         if chest.opened:
             return
         chest.open()
@@ -637,7 +598,6 @@ class GameView(arcade.View):
         left = cx - panel_w / 2
         # Column starts, measured from the panel's left edge. The name
         # column has to clear the longest item name ("Sharpened Blade"),
-        # which used to run into the description text.
         col_name = left + 25
         col_desc = left + 235
         col_status = cx + panel_w / 2 - 25       # right-aligned
@@ -758,7 +718,6 @@ class GameView(arcade.View):
 
         # Clamp player to map bounds — by their real collision body, not
         # the image box (its transparent margins kept the player ~55px
-        # away from map edges, blocking narrow passages near them)
         half_w = self.player_sprite.body_half_width
         half_h = self.player_sprite.body_half_height
         self.player_sprite.center_x = max(half_w,
@@ -768,17 +727,6 @@ class GameView(arcade.View):
 
         # ── One-way "jump-through" platform collision ──────────────────
         # platform_list is deliberately excluded from physics_engine's
-        # walls, so gravity alone would let the player fall straight
-        # through. Two cases are resolved manually here:
-        #
-        # 1. LANDING — moving downward (or resting) with feet within one
-        #    frame's fall distance of a platform's top: stop on it.
-        # 2. STEP-UP — already standing on ground/platform and walking
-        #    into a platform whose top is at most PLATFORM_STEP_UP above
-        #    the feet (a one-tile rise in the terrain): lift the player
-        #    onto it. Without this, stepped platform terrain was
-        #    unwalkable — the higher tile never "caught" the player, so
-        #    they ran out of floor and fell to the level below.
         was_on_platform = self.player_on_platform
         self.player_on_platform = False
 
@@ -792,8 +740,6 @@ class GameView(arcade.View):
                 step = platform.top - self.player_sprite.bottom
                 # +6 not +2: the player's alpha-shaped hitbox has to sink a
                 # few px into a tile's edge before arcade's polygon check
-                # registers the overlap, so a tight window let them slip
-                # into free fall right after stepping up onto a tile
                 fall_distance = abs(self.player_sprite.change_y) + 6
                 if (self.player_sprite.change_y <= 0
                         and -1 <= step <= fall_distance):
@@ -830,7 +776,6 @@ class GameView(arcade.View):
 
         # AI (Slime.update) only sets change_x for direction. Actually
         # moving each enemy — applying gravity and colliding with
-        # wall_list — happens here, one physics engine per enemy.
         for enemy, engine in list(self.enemy_physics_engines.items()):
             if not enemy.sprite_lists:
                 # Enemy died and was removed via remove_from_sprite_lists()
@@ -842,7 +787,6 @@ class GameView(arcade.View):
 
             # Small-obstacle hop: if the enemy is trying to walk (change_x
             # set) but barely moved this frame, it's blocked by a low wall
-            # or step. Hop over it instead of getting stuck.
             moved = abs(enemy.center_x - prev_x)
             if enemy.change_x != 0 and moved < abs(enemy.change_x) * 0.5 and engine.can_jump():
                 enemy.change_y = ENEMY_JUMP_SPEED
@@ -914,12 +858,7 @@ class GameView(arcade.View):
                 self.player_sprite.knockback_timer = PLAYER_KNOCKBACK_TIMER
 
     def check_cave_entrances(self):
-        """
-        Track which usable door the player is standing on. Nothing fires
-        automatically — active_entry drives the on-screen "[F] Enter"
-        prompt, and try_enter_door() (bound to DOOR_INTERACT_KEY) does the
-        actual transition.
-        """
+        """Track which usable door the player is standing on."""
         self.active_door = None
         self.active_entry = None
 
@@ -998,6 +937,13 @@ class GameView(arcade.View):
 
     def end_boss_fight(self, origin_room, outcome):
         """Return from the arena, arriving back on the boss door."""
+        if outcome == "defeat":
+            # Losing costs coins and score, the same as dying in the world
+            lost = int(self.player_sprite.money * BOSS_DEFEAT_COIN_LOSS)
+            self.player_sprite.money -= lost
+            self.deaths += 1
+            self.boss_defeat_loss = lost
+            print(f"Defeated by the boss — lost {lost} coins")
         if outcome == "victory":
             self.boss_defeated = True
             self.bosses_beaten += 1
@@ -1079,7 +1025,6 @@ class GameView(arcade.View):
         elif key == arcade.key.S:
             # Drop through the one-way platform currently standing on.
             # Ignoring platform collision for a few frames is enough to
-            # clear the platform's hitbox before it starts checking again.
             if self.player_on_platform:
                 self.drop_through_timer = DROP_THROUGH_TIMER
         elif key in (arcade.key.LSHIFT, arcade.key.RSHIFT):
@@ -1127,12 +1072,7 @@ class GameView(arcade.View):
 
     @property
     def score(self):
-        """Points earned, minus what was spent making the game easier.
-
-        Every purchase costs score in proportion to its price, so a player
-        who clears the game on fewer upgrades scores higher than one who
-        bought their way through — which is the point of the table.
-        """
+        """Points earned, minus what was spent making the game easier."""
         earned = (self.player_sprite.kills * SCORE_ENEMY_KILL
                   + self.chests_taken * SCORE_CHEST
                   + self.bosses_beaten * SCORE_BOSS
@@ -1156,16 +1096,7 @@ class GameView(arcade.View):
                 else f"Level {self.level}")
 
     def advance_level(self):
-        """Start the next level: the same world again, tougher enemies.
-
-        The player keeps their health, coins and every upgrade, so the maps
-        they already know become a real fight. The world itself is reset —
-        walls unbroken, chests refilled, the boss waiting again — so there
-        is a full run to play rather than an emptied-out map.
-
-        The game is FINAL_LEVEL levels long; clearing the last one finishes
-        it rather than looping into an endless run of identical levels.
-        """
+        """Start the next level: the same world again, tougher enemies."""
         self.levels_cleared += 1
         if self.level >= FINAL_LEVEL:
             self.game_won = True
@@ -1203,7 +1134,6 @@ class GameView(arcade.View):
         self.right_pressed = False
         # Dying sends you back to the very start of the level, not to the
         # room you died in — spikes and slimes both mean starting the run
-        # over. Coins and upgrades are kept.
         self.load_room(STARTING_ROOM)
 
     def draw_win_screen(self):
@@ -1275,7 +1205,6 @@ class GameView(arcade.View):
     def on_show_view(self):
         # Clear stale held-key state when resuming from the pause menu —
         # a key released while the menu was open never sent its release
-        # event to this view
         self.left_pressed = False
         self.right_pressed = False
         # The window may have been resized/fullscreened while the pause
@@ -1292,9 +1221,9 @@ class GameView(arcade.View):
 
     def on_window_resize(self, width, height):
         """Called by GameWindow when the window size changes (fullscreen
-        toggle or drag-resize) — cameras adopt the new viewport, the zoom
-        rescales so the same world area stays visible, and the camera
-        snaps back onto the player (match_window resets its position)."""
+        toggle or drag-resize) — cameras adopt the new viewport, the
+        zoom rescales so the same…
+        """
         if self.camera is None:
             return
         self.camera.match_window()
@@ -1341,14 +1270,7 @@ class GameView(arcade.View):
 
     # ── Shop ────────────────────────────────────────────────────────────
     def item_state(self, item):
-        """(level, max_level, price, buyable) for a SHOP_ITEMS entry.
-
-        On later levels nothing the player owns is taken away. Instead,
-        repeatable upgrades gain another full set of levels and every price
-        is inflated by SHOP_LEVEL_PRICE_MULT per level — so the shop is
-        worth using again, and what you already bought is a head start
-        rather than the finished article.
-        """
+        """(level, max_level, price, buyable) for a SHOP_ITEMS entry."""
         player = self.player_sprite
         level = player.upgrades.get(item["key"], 0)
         base_levels = item.get("levels", 1)

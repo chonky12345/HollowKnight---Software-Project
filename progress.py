@@ -1,11 +1,4 @@
-"""
-Saving progress and keeping high scores.
-
-Both are plain JSON files next to the game, so a save survives closing the
-program and the high score table is readable (and editable) without any
-extra tooling. Everything here is defensive: a missing, empty or corrupted
-file is treated as "no save" rather than crashing the game.
-"""
+"""Saving progress and keeping high scores."""
 
 import datetime
 import json

@@ -54,7 +54,6 @@ class Enemy(arcade.Sprite):
 
         # Red flash on hit — same feedback as the boss fight. The Boss
         # overrides its colour again after this (telegraph tints etc.),
-        # so this only drives plain enemies like slimes.
         if self.hit_flash_timer > 0:
             self.hit_flash_timer -= 1
             self.color = (255, 70, 70)
@@ -66,12 +65,7 @@ class Enemy(arcade.Sprite):
     
         
 class Slime(Enemy):
-    """
-    A patrolling slime. `variant` picks an entry from ENEMY_TIERS, which
-    sets its artwork, size, health, damage, speed and coin reward — the
-    green slimes of level 1 and the far tougher orange ones of level 2 are
-    the same class with different numbers.
-    """
+    """A patrolling slime."""
 
     _animations = {}
 
@@ -79,7 +73,7 @@ class Slime(Enemy):
     def load_animation(cls, art):
         """Load one variant's frames once and share them between slimes."""
         if art not in cls._animations:
-            files = sorted(glob.glob(resource_path(f"Assets/Enemies/{art}/*.png")))
+            files = sorted(glob.glob(resource_path(f"Assets/enemies/{art}/*.png")))
             cls._animations[art] = [arcade.load_texture(f) for f in files]
         return cls._animations[art]
 
@@ -123,9 +117,6 @@ class Slime(Enemy):
 
         # Only set the desired horizontal direction here. Actual
         # movement, gravity, and wall collision are handled by this
-        # slime's own PhysicsEnginePlatformer in game_view.py — directly
-        # setting center_x (as before) skipped gravity entirely and let
-        # the slime walk straight through walls.
         if self.center_x < player.center_x:
             self.change_x = self.speed
         elif self.center_x > player.center_x:

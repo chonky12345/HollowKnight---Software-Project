@@ -1,30 +1,15 @@
-"""
-Camera behaviour shared by every view that shows a map.
-
-The world rooms and the boss arena scroll the same way, so the rule for
-"keep the player in frame without ever showing outside the map" is written
-once here rather than in each view.
-"""
+"""Camera behaviour shared by every view that shows a map."""
 
 from constants import BASE_VIEW_WIDTH, DEFAULT_CAMERA_ZOOM, SCROLL_MARGIN
 
 
 def zoom_for_window(window, base_zoom=DEFAULT_CAMERA_ZOOM):
-    """
-    Room zooms are tuned for a BASE_VIEW_WIDTH-wide window. Scaling with
-    the window keeps the same amount of world on screen at any size —
-    without it a larger window showed more world than the map contained
-    and the clamp below locked the camera in a corner.
-    """
+    """Room zooms are tuned for a BASE_VIEW_WIDTH-wide window."""
     return base_zoom * window.width / BASE_VIEW_WIDTH
 
 
 def clamp_to_map(cam_x, cam_y, view_w, view_h, map_width, map_height):
-    """
-    Keep the camera inside the map. If the view is larger than the map on
-    an axis, centre on that axis instead — the usual min/max clamp inverts
-    in that case and freezes the camera where it stands.
-    """
+    """Keep the camera inside the map."""
     if view_w >= map_width:
         cam_x = map_width / 2
     else:
@@ -37,9 +22,8 @@ def clamp_to_map(cam_x, cam_y, view_w, view_h, map_width, map_height):
 
 
 def follow(camera, window, target, map_width, map_height):
-    """
-    Scroll so the target stays SCROLL_MARGIN inside the view edges, then
-    clamp to the map. Called once per frame by the view.
+    """Scroll so the target stays SCROLL_MARGIN inside the view edges, then
+    clamp to the map.
     """
     view_w = window.width / camera.zoom
     view_h = window.height / camera.zoom

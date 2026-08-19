@@ -14,7 +14,6 @@ class Player(arcade.Sprite):
 
         # Animation state. The collision shape is taken from the first idle
         # frame and then pinned: every frame must collide identically, or
-        # the player would snag and jitter as the artwork changes shape.
         self._pinned_hit_box = self.hit_box
         self.animation = "idle"
         self.frame_index = 0.0
@@ -22,7 +21,6 @@ class Player(arcade.Sprite):
 
         # Actual collision-body size. The image has big transparent
         # margins, so width/height (the full 153px image box) overstate
-        # the body a lot — use these for clamping against map edges.
         xs = [pt[0] for pt in self.hit_box.get_adjusted_points()]
         ys = [pt[1] for pt in self.hit_box.get_adjusted_points()]
         self.body_half_width = (max(xs) - min(xs)) / 2
@@ -30,7 +28,6 @@ class Player(arcade.Sprite):
         
         # Player stats — base values come from constants; shop upgrades
         # (apply_upgrade below) raise them on THIS sprite, so they persist
-        # across rooms and into the boss fight
         self.health = PLAYER_MAX_HEALTH
         self.max_health = PLAYER_MAX_HEALTH
         self.attack_damage = PLAYER_ATTACK_DAMAGE
@@ -70,7 +67,7 @@ class Player(arcade.Sprite):
         if not cls._animations:
             for name in ("idle", "walk", "jump", "dash"):
                 files = sorted(glob.glob(
-                    resource_path(f"Assets/Player/{name}/*.png")))
+                    resource_path(f"Assets/player/{name}/*.png")))
                 cls._animations[name] = [arcade.load_texture(f) for f in files]
         return cls._animations
 
@@ -116,14 +113,7 @@ class Player(arcade.Sprite):
             self.on_death()
     
     def on_death(self):
-        """The player is out of health.
-
-        Deliberately does NOT remove the sprite from its sprite lists: the
-        player object is shared by the world and the boss arena, and
-        removing it from every list left the game holding an empty
-        player_list and crashing on the next frame. The views check
-        health instead and show their own death screen.
-        """
+        """The player is out of health."""
         self.health = 0
     
     def reset_jumps(self):
@@ -136,13 +126,6 @@ class Player(arcade.Sprite):
     def attack_rect(self):
         """The sword's hitbox: (left, right, bottom, top) of a rectangle
         reaching attack_range in front of the player.
-
-        Everything that the swing can touch uses this one rectangle —
-        enemies, breakable walls, the boss, and the slash that is drawn on
-        screen — so the sword always hurts exactly as far as it looks.
-        (It used to damage enemies by centre-to-centre distance instead,
-        which meant a wide enemy standing inside the visible slash was not
-        hit, because its centre was further away than its edge.)
         """
         if self.facing == 1:
             left, right = self.center_x, self.right + self.attack_range

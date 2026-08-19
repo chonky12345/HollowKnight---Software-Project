@@ -1,39 +1,4 @@
-"""
-Standalone boss fight arena.
-
-Run it by itself (no map files needed — the arena is built in code):
-
-    python boss_main.py
-
-HOW TO SLOT THIS INTO THE MAIN GAME LATER
------------------------------------------
-From GameView, when the player touches a boss door / trigger:
-
-    from boss_fight_view import BossFightView
-
-    def enter_boss_fight(self):
-        fight = BossFightView(
-            player=self.player_sprite,        # keeps health/coins/abilities
-            on_finish=self.exit_boss_fight,   # called with "victory" or "defeat"
-        )
-        fight.setup()
-        self.window.show_view(fight)
-
-    def exit_boss_fight(self, outcome):
-        # Reposition the player and reload the room you want them back in,
-        # e.g. self.load_room(self.current_room), then:
-        self.window.show_view(self)
-
-Passing an existing player keeps their stats; passing nothing (like
-boss_main.py does) creates a test player with dash + double jump already
-unlocked so the fight is easy to playtest on its own.
-
-Notes for integration:
-- setup() restores the player to full health (retry behaviour).
-- The melee swing uses Player.attack_rect(), the same rectangle the
-  world and the on-screen slash use, so the sword reaches equally far
-  everywhere.
-"""
+"""The boss arena: its own View, because the fight has its own rules."""
 
 import arcade
 
@@ -144,7 +109,6 @@ class BossFightView(arcade.View):
 
         # The arena is shown exactly like a world room — same zoom, camera
         # scrolling with the player — so the character is the same size
-        # here as everywhere else
         self.camera = arcade.Camera2D()
         self.camera.zoom = game_camera.zoom_for_window(self.window)
         game_camera.snap_to(self.camera, self.window,
@@ -414,7 +378,11 @@ class BossFightView(arcade.View):
             subtitle = f"+{BOSS_KILL_REWARD} coins"
         else:
             title, color = "YOU DIED", arcade.color.CRIMSON_GLORY
-            subtitle = "The Cave Guardian stands"
+            # Warn what leaving will cost, before they press the key
+            cost = int(self.player_sprite.money * BOSS_DEFEAT_COIN_LOSS)
+            subtitle = (f"{self.boss.boss_name.title()} stands  —  "
+                        f"leaving costs {cost} coins and "
+                        f"{SCORE_DEATH_PENALTY} score")
 
         arcade.draw_text(title, w / 2, h / 2 + 30, color, 48,
                          anchor_x="center", bold=True)

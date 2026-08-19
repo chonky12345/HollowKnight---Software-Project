@@ -8,10 +8,7 @@ from enemy import Enemy, Slime
 
 
 class BossProjectile(arcade.SpriteCircle):
-    """
-    A hazard fired by the boss. It moves itself in update(); the view is
-    responsible for wall collisions, player hits, and drawing.
-    """
+    """A hazard fired by the boss."""
 
     def __init__(self, x, y, vx, vy, damage, radius=8,
                  color=arcade.color.ORANGE_RED, gravity=0.0,
@@ -37,12 +34,7 @@ class BossProjectile(arcade.SpriteCircle):
 
 
 class BossBeam(arcade.SpriteSolidColor):
-    """
-    A telegraphed laser spanning part of the arena. Blinks as a thin
-    harmless warning line for BOSS_BEAM_WARN_FRAMES, then erupts into a
-    thick damaging beam for BOSS_BEAM_FIRE_FRAMES, then removes itself.
-    Only damages while .firing is True — the view checks collisions.
-    """
+    """A telegraphed laser spanning part of the arena."""
 
     def __init__(self, left_x, center_y, length):
         super().__init__(int(length), BOSS_BEAM_THICKNESS,
@@ -81,31 +73,7 @@ class BossBeam(arcade.SpriteSolidColor):
 
 
 class Boss(Enemy):
-    """
-    Cave Guardian boss. Frame-based state machine:
-
-        idle      — stalks toward the player, then picks an attack
-        telegraph — stands still and flashes a colour that telegraphs
-                    WHICH attack is coming (red=charge, purple=leap,
-                    green=spit), so the player can pre-dodge
-        charge    — high-speed horizontal rush; slamming into an arena
-                    wall doubles the recovery stun (main punish window)
-        leap      — jumps at the player; landing spawns two ground
-                    shockwaves that must be jumped over
-        recover   — vulnerable pause, then back to idle
-
-    Spit fires instantly at the end of its telegraph (a fan of arcing
-    projectiles aimed at the player) and goes straight to recover.
-
-    Phase 2 (below BOSS_PHASE2_THRESHOLD health): faster movement,
-    shorter telegraphs, more spit projectiles.
-
-    Movement/gravity is applied by a PhysicsEnginePlatformer owned by
-    the view (same pattern as Slime) — this class only sets change_x /
-    change_y. The view passes `grounded` and `moved` (distance actually
-    travelled last frame) into update() so the boss can detect landings
-    and wall impacts.
-    """
+    """Cave Guardian boss."""
 
     TELEGRAPH_TINTS = {
         "charge": (255, 80, 80),
@@ -209,7 +177,6 @@ class Boss(Enemy):
 
         # Crossing a phase threshold staggers the boss: stunned, fully
         # damageable, any combo in progress is cancelled — the reward
-        # window for pushing it over the line
         if self.phase != self._last_phase:
             self._last_phase = self.phase
             self.repeats_left = 0
@@ -247,7 +214,6 @@ class Boss(Enemy):
                 if self.repeats_left > 0 and not hit_wall:
                     # Combo: re-aim at the player and wind up a short
                     # second charge (dodging behind the boss won't save you
-                    # twice). Hitting a wall always ends the combo.
                     self.charge_dir = 1 if player.center_x > self.center_x else -1
                     self.facing = self.charge_dir
                     self.next_attack = "charge"
@@ -320,7 +286,6 @@ class Boss(Enemy):
             self.state_timer = BOSS_CHARGE_FRAMES
             # Start moving NOW — the wall-impact check compares actual
             # movement against change_x, so launching at 0 speed read as
-            # an instant wall hit and ended the charge on frame one
             self.change_x = (self.charge_dir * BOSS_CHARGE_SPEED
                              * self.phase_config["speed"])
 
@@ -506,9 +471,8 @@ class Boss(Enemy):
 
     def _fire_beams(self, player):
         """Lay down BOSS_BEAM_COUNT telegraphed lasers, each spanning half
-        or a third of the arena from one of the side walls. The first is
-        aimed at the player's current height — standing still is death;
-        the gaps between lanes are the dodge."""
+        or a third of the arena from one of the side walls.
+        """
         lanes = [player.center_y]
         while len(lanes) < BOSS_BEAM_COUNT:
             y = random.uniform(70, self.arena_height - 70)
@@ -526,7 +490,6 @@ class Boss(Enemy):
     def _spawn_shockwaves(self):
         # Two ground-hugging waves rolling out from the landing point —
         # spawned just above the floor so they don't instantly collide
-        # with it, and killed by the arena walls or their lifetime
         for direction in (-1, 1):
             self.projectile_list.append(BossProjectile(
                 self.center_x + direction * self.width * 0.5,

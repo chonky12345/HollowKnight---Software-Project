@@ -1,18 +1,4 @@
-"""
-Automated test suite for the Metroidvania major project.
-
-Run from anywhere with:
-
-    python tests/test_game.py
-
-Every test drives the real game objects (no mock-ups): it loads the real
-Ogmo maps, runs the real physics/update loop, and presses the real keys
-through the same handlers the player uses. A test fails loudly with an
-AssertionError; the suite prints a tick for each behaviour that passes and
-"ALL TESTS PASSED" at the end.
-
-The matching written test-data table is in docs/TEST_DATA.md.
-"""
+"""Automated test suite for the Metroidvania major project."""
 
 import os
 import random
@@ -411,7 +397,6 @@ def main():
 
     # Beam #0 is always aimed at the player's height; the others go in
     # random lanes. Remove those so the damage measured below can only
-    # have come from the beam being tested.
     beam = fight.beam_list[0]
     for other in list(fight.beam_list):
         if other is not beam:

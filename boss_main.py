@@ -1,9 +1,6 @@
-"""
-Launch the boss fight on its own, without the main game:
-
-    python boss_main.py
-
-The test player spawns with dash + double jump unlocked and full health.
+"""Launch the boss fight on its own, without the main game: python
+boss_main.py The test player spawns with dash + double jump unlocked and
+full health.
 """
 
 import arcade

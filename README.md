@@ -39,7 +39,9 @@ own for testing with `python boss_main.py`.
 - **Breakable walls** that permanently open hidden passages
 - **Treasure chests** whose rewards scale with how well hidden the room is
 - **Hazards** that return the player to safe ground behind a screen fade
-- **A three-phase boss fight** with telegraphed attacks, staggers and lasers
+- **Two bosses**, three phases each, with telegraphed attacks and staggers
+- **Two levels** — the world replayed with tougher enemies and a new boss
+- **Saving and high scores**, where buying upgrades lowers your score
 - **Menus and in-game help**, with controls available at all times
 
 ## Documentation
@@ -63,24 +65,33 @@ Screenshots used in the manual are in [docs/images](docs/images).
 python tests/test_game.py
 ```
 
-Drives the real game through 23 behaviour checks covering room
-transitions, combat, the shop, chests, hazards, the boss fight and menus.
+Drives the real game through 48 behaviour checks covering room
+transitions, combat, the shop, chests, hazards, levels, saving, scoring,
+the boss fights and the menus.
 
 ## Project structure
 
 ```
 main.py                 Entry point — opens the window and shows the menu
-menu.py                 Main menu, pause menu, Controls screen
+menu.py                 Main menu, pause menu, Controls and High Scores
 game_view.py            Main gameplay: rooms, physics, input, HUD, shop
-player.py               Player sprite, stats and upgrades
-enemy.py                Base enemy behaviour and the slime
-boss.py                 Boss enemy, projectiles and beams
+player.py               Player sprite, animation, stats and upgrades
+enemy.py                Base enemy behaviour and the slime variants
+boss.py                 Boss enemy, projectiles, beams and boulders
 boss_fight_view.py      The boss arena
 boss_main.py            Launches the boss fight on its own
 entities.py             Walls, chests, doorways, spawn points
+maploader.py            Reads Ogmo levels (shared by the world and arena)
+game_camera.py          Camera follow and clamping (shared)
+progress.py             Saving, loading and the high score table
 constants.py            All tunable values and world configuration
-Assets/                 Sprites and tilesets
+
+Assets/player/          Idle, walk, jump and dash animation frames
+Assets/enemies/         Green and orange slime animation frames
+Assets/tilesets/        One full-room image per area
+Assets/sprites/         Objects in the world (chest)
+Assets/ui/              Menu artwork
 Maps/                   Ogmo Editor levels and project file
-docs/                   Documentation
+docs/                   Screenshots used by the documentation
 tests/                  Automated test suite
 ```
