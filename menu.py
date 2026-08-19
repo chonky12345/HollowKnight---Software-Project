@@ -6,6 +6,7 @@ import arcade.gui
 
 from constants import resource_path, HELP_CONTROLS, HELP_TIPS
 import progress
+import help_screen
 
 SCREEN_WIDTH = 960
 SCREEN_HEIGHT = 544
@@ -214,8 +215,7 @@ class MenuView(arcade.View):
 
 
 class HelpView(arcade.View):
-    """The menu's Controls screen — the same controls and tips the [H]
-    overlay shows during play, so a player can read them before starting."""
+    """The menu's Controls screen — the same panel the [H] overlay shows."""
 
     def __init__(self, return_view):
         super().__init__()
@@ -231,27 +231,8 @@ class HelpView(arcade.View):
     def on_draw(self):
         self.clear()
         w, h = self.window.width, self.window.height
-        cx = w / 2
-
         arcade.draw_lrbt_rectangle_filled(0, w, 0, h, (14, 12, 22, 255))
-        arcade.draw_text("CONTROLS", cx, h - 60, GOLD, 30,
-                         anchor_x="center", bold=True)
-
-        y = h - 115
-        for key, what in HELP_CONTROLS:
-            arcade.draw_text(key, 110, y, GOLD, 14, bold=True)
-            arcade.draw_text(what, 215, y, (*PARCHMENT, 230), 14)
-            y -= 24
-
-        y -= 14
-        arcade.draw_text("TIPS", 110, y, (*PARCHMENT, 255), 16, bold=True)
-        y -= 26
-        for tip in HELP_TIPS:
-            arcade.draw_text(f"•  {tip}", 120, y, (170, 165, 150, 230), 12)
-            y -= 20
-
-        arcade.draw_text("click anywhere or press ESC to go back", cx, 26,
-                         (150, 145, 130, 200), 12, anchor_x="center")
+        help_screen.draw(self.window)
 
 
 class HighScoreView(arcade.View):

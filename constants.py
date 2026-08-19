@@ -129,10 +129,10 @@ SHOP_ITEMS = [
 # during play, so both always describe the same controls.
 HELP_CONTROLS = [
     ("A / D", "Move left and right"),
-    ("W", "Jump  (again in mid-air once Double Jump is bought)"),
-    ("S", "Drop down through a wooden platform"),
+    ("W", "Jump — twice once Double Jump is bought"),
+    ("S", "Drop through a wooden platform"),
     ("SPACE", "Swing your sword"),
-    ("SHIFT", "Dash — you cannot be hurt while dashing  (shop upgrade)"),
+    ("SHIFT", "Dash — invincible while dashing"),
     ("E", "Open and close the shop"),
     ("F", "Enter a doorway or open a chest"),
     ("H", "Show this help"),
@@ -140,16 +140,16 @@ HELP_CONTROLS = [
 ]
 
 HELP_TIPS = [
-    "Defeat enemies to earn coins, then spend them in the shop (E).",
-    "A doorway shows a [F] Enter prompt when you are standing in it.",
-    "Cracked walls can be broken by hitting them a few times with SPACE.",
-    "Chests hold coins — deeper, better hidden rooms hold far more.",
-    "Spikes are instant death — you restart the level, keeping coins and upgrades.",
-    "Buy the Dash before the boss: dashing through attacks avoids damage.",
-    "Beating the boss starts level 2: same world, orange slimes, a new boss.",
-    "Level 2 does not reset your upgrades — the shop just opens more levels.",
-    "Every upgrade you buy lowers your score: winning lean scores highest.",
-    "Progress saves automatically — pick it up with Continue on the menu.",
+    "Kill enemies for coins, then spend them in the shop.",
+    "Doorways show a [F] prompt when you stand in one.",
+    "Cracked walls break after a few SPACE hits.",
+    "Better hidden chests hold far more coins.",
+    "Spikes kill instantly — you restart the level.",
+    "Dash through boss attacks: it makes you untouchable.",
+    "Beating the boss starts level 2: orange slimes, new boss.",
+    "Level 2 keeps your upgrades and opens more shop levels.",
+    "Every upgrade you buy lowers your final score.",
+    "Progress saves itself — resume with Continue.",
 ]
 
 # Score. Playing well earns points; making the game easier costs them, so

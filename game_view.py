@@ -10,6 +10,7 @@ from entities import Wall, PlayerSpawner, CaveEntrance, Chest
 from maploader import load_ogmo_map, new_tile_atlas
 import game_camera
 import progress
+import help_screen
 
 
 class GameView(arcade.View):
@@ -558,33 +559,11 @@ class GameView(arcade.View):
                 )
 
     def draw_help(self):
-        """Full-screen controls + tips overlay, opened with [H] and shown
-        once automatically when a new game starts."""
+        """The [H] overlay — the same panel the menu's Controls screen shows."""
         w, h = self.window.width, self.window.height
-        cx = w / 2
-
-        arcade.draw_lrbt_rectangle_filled(0, w, 0, h, (8, 6, 14, 235))
-        arcade.draw_text("HOW TO PLAY", cx, h - 55, arcade.color.GOLD, 26,
-                         anchor_x="center", bold=True)
-
-        y = h - 105
-        arcade.draw_text("CONTROLS", 90, y, arcade.color.WHITE_SMOKE, 15,
-                         bold=True)
-        y -= 26
-        for key, what in HELP_CONTROLS:
-            arcade.draw_text(key, 100, y, arcade.color.GOLD, 13, bold=True)
-            arcade.draw_text(what, 205, y, arcade.color.LIGHT_GRAY, 13)
-            y -= 21
-
-        y -= 12
-        arcade.draw_text("TIPS", 90, y, arcade.color.WHITE_SMOKE, 15, bold=True)
-        y -= 24
-        for tip in HELP_TIPS:
-            arcade.draw_text(f"•  {tip}", 100, y, arcade.color.LIGHT_GRAY, 12)
-            y -= 19
-
-        arcade.draw_text("press  H  or  ESC  to close", cx, 24,
-                         arcade.color.GRAY, 12, anchor_x="center")
+        arcade.draw_lrbt_rectangle_filled(0, w, 0, h, (8, 6, 14, 238))
+        help_screen.draw(self.window, title="HOW TO PLAY",
+                         footer="press  H  or  ESC  to close")
 
     def draw_shop(self):
         cx = self.window.width / 2
