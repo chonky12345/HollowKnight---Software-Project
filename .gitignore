@@ -16,3 +16,7 @@ venv/
 Possible Assets/
 other thing/
 *.zip
+
+# Saved game and high score table (created at runtime)
+savegame.json
+highscores.json

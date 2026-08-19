@@ -9,6 +9,7 @@ from enemy import Slime
 from entities import Wall, PlayerSpawner, CaveEntrance, Chest
 from maploader import load_ogmo_map, new_tile_atlas
 import game_camera
+import progress
 
 
 class GameView(arcade.View):
@@ -96,6 +97,19 @@ class GameView(arcade.View):
         self.level_banner = 0          # frames left showing the "Level N" title
         self.game_won = False          # beat the boss on the final level
 
+        # Score tallies. Kills live on the player (it does the killing);
+        # the rest are counted here. See the `score` property.
+        self.chests_taken = 0
+        self.bosses_beaten = 0
+        self.levels_cleared = 0
+        self.deaths = 0
+        self.coins_spent = 0
+
+        # Autosaving stays off until setup() has finished. Otherwise
+        # creating a GameView in order to LOAD a save would immediately
+        # overwrite that save with a brand-new game.
+        self.autosave_enabled = False
+
     # ────────────────────────────────────────────────────────────────────────
     def setup(self):
         self.player_list = arcade.SpriteList()
@@ -106,6 +120,7 @@ class GameView(arcade.View):
         self.gui_camera = arcade.Camera2D()
 
         self.load_room(STARTING_ROOM)
+        self.autosave_enabled = True
 
         arcade.set_background_color(arcade.color.DARK_SLATE_GRAY)
 
@@ -183,6 +198,11 @@ class GameView(arcade.View):
             gravity_constant=GRAVITY,
             walls=[self.wall_list, self.breakable_list]
         )
+
+        # Progress is saved on every arrival, so quitting never loses more
+        # than the room you were in
+        if self.autosave_enabled and not self.game_won:
+            progress.save_game(self)
 
         # Grace period before the door we just arrived on can be used again
         self.transition_cooldown = TRANSITION_COOLDOWN
@@ -444,6 +464,7 @@ class GameView(arcade.View):
         if chest.opened:
             return
         chest.open()
+        self.chests_taken += 1
         self.active_chest = None
         self.opened_chests.add((self.current_room, chest.cell_key))
         self.player_sprite.money += chest.coins
@@ -486,7 +507,9 @@ class GameView(arcade.View):
             20
         )
 
-        arcade.draw_text(f"[E] Shop    [H] Help    {self.level_name}", 10, 450,
+        arcade.draw_text(f"Score: {self.score}", 10, 450,
+                         arcade.color.WHITE_SMOKE, 14)
+        arcade.draw_text(f"[E] Shop    [H] Help    {self.level_name}", 10, 428,
                          arcade.color.LIGHT_GRAY, 12)
 
         if self.level_banner > 0:
@@ -836,6 +859,7 @@ class GameView(arcade.View):
                 # Spikes kill outright — no fade, straight to the death screen
                 self.player_sprite.health = 0
                 self.player_dead = True
+                self.deaths += 1
                 print("Killed by spikes — press R to try again")
                 return
             self.fade_phase = "out"
@@ -847,6 +871,7 @@ class GameView(arcade.View):
 
         if self.player_sprite.health <= 0:
             self.player_dead = True
+            self.deaths += 1
             print("You died — press R to try again")
             return
 
@@ -975,6 +1000,7 @@ class GameView(arcade.View):
         """Return from the arena, arriving back on the boss door."""
         if outcome == "victory":
             self.boss_defeated = True
+            self.bosses_beaten += 1
             # Beating the boss is the end of a level — start the next one
             self.player_sprite.health = self.player_sprite.max_health
             self.window.show_view(self)
@@ -1100,6 +1126,26 @@ class GameView(arcade.View):
                 break
 
     @property
+    def score(self):
+        """Points earned, minus what was spent making the game easier.
+
+        Every purchase costs score in proportion to its price, so a player
+        who clears the game on fewer upgrades scores higher than one who
+        bought their way through — which is the point of the table.
+        """
+        earned = (self.player_sprite.kills * SCORE_ENEMY_KILL
+                  + self.chests_taken * SCORE_CHEST
+                  + self.bosses_beaten * SCORE_BOSS
+                  + self.levels_cleared * SCORE_LEVEL_CLEAR)
+        spent = (self.deaths * SCORE_DEATH_PENALTY
+                 + self.coins_spent * SCORE_PER_COIN_SPENT)
+        return max(0, int(earned - spent))
+
+    @property
+    def upgrades_bought(self):
+        return sum(self.player_sprite.upgrades.values())
+
+    @property
     def enemy_variant(self):
         """Which slime this level spawns (levels past the list reuse the last)."""
         return LEVEL_ENEMIES[min(self.level, len(LEVEL_ENEMIES)) - 1]
@@ -1120,8 +1166,13 @@ class GameView(arcade.View):
         The game is FINAL_LEVEL levels long; clearing the last one finishes
         it rather than looping into an endless run of identical levels.
         """
+        self.levels_cleared += 1
         if self.level >= FINAL_LEVEL:
             self.game_won = True
+            progress.add_highscore(self.score, self.level,
+                                   self.player_sprite.kills,
+                                   self.upgrades_bought)
+            progress.delete_save()      # the run is over
             print("=== You beat the game! ===")
             return
 
@@ -1161,11 +1212,16 @@ class GameView(arcade.View):
         arcade.draw_lrbt_rectangle_filled(0, w, 0, h, (0, 0, 0, 200))
         arcade.draw_text("YOU WIN", cx, h / 2 + 50, arcade.color.GOLD, 52,
                          anchor_x="center", bold=True)
-        arcade.draw_text(f"Both levels cleared — {self.player_sprite.money} coins earned",
-                         cx, h / 2 - 5, arcade.color.WHITE_SMOKE, 18,
-                         anchor_x="center")
+        arcade.draw_text(f"FINAL SCORE   {self.score}",
+                         cx, h / 2 - 5, arcade.color.WHITE_SMOKE, 22,
+                         anchor_x="center", bold=True)
+        arcade.draw_text(
+            f"{self.player_sprite.kills} kills · {self.chests_taken} chests · "
+            f"{self.upgrades_bought} upgrades bought "
+            f"(−{int(self.coins_spent * SCORE_PER_COIN_SPENT)} points)",
+            cx, h / 2 - 38, arcade.color.LIGHT_GRAY, 13, anchor_x="center")
         arcade.draw_text("R — play again from level 1        ESC — menu",
-                         cx, h / 2 - 50, arcade.color.LIGHT_GRAY, 14,
+                         cx, h / 2 - 70, arcade.color.LIGHT_GRAY, 14,
                          anchor_x="center")
 
     def restart_game(self):
@@ -1186,7 +1242,14 @@ class GameView(arcade.View):
         p.move_speed = PLAYER_MOVEMENT_SPEED
         p.dash_cooldown_frames = DASH_COOLDOWN
         p.coin_mult = 1.0
+        p.kills = 0
         p.health = p.max_health
+        self.chests_taken = 0
+        self.bosses_beaten = 0
+        self.levels_cleared = 0
+        self.deaths = 0
+        self.coins_spent = 0
+        progress.delete_save()
         self.load_room(STARTING_ROOM)
 
     def draw_death_screen(self):
@@ -1319,6 +1382,7 @@ class GameView(arcade.View):
             return
 
         p.money -= price
+        self.coins_spent += price       # upgrades cost score, not just coins
         if not item.get("consumable", False):
             p.upgrades[item["key"]] = level + 1
         p.apply_upgrade(item["key"])

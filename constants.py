@@ -163,7 +163,26 @@ HELP_TIPS = [
     "Buy the Dash before the boss: dashing through attacks avoids damage.",
     "Beating the boss starts level 2: same world, orange slimes, a new boss.",
     "Level 2 does not reset your upgrades — the shop just opens more levels.",
+    "Every upgrade you buy lowers your score: winning lean scores highest.",
+    "Progress saves automatically — pick it up with Continue on the menu.",
 ]
+
+# Score. Playing well earns points; making the game easier costs them, so
+# buying upgrades is a real trade-off between surviving and scoring. The
+# final score is what goes on the high score table.
+SCORE_ENEMY_KILL     = 50
+SCORE_CHEST          = 150
+SCORE_BOSS           = 1500
+SCORE_LEVEL_CLEAR    = 1000
+SCORE_DEATH_PENALTY  = 300
+# Points lost per coin spent in the shop — a stronger (dearer) upgrade
+# costs proportionally more score
+SCORE_PER_COIN_SPENT = 1.0
+
+# Where progress and the high score table are kept (JSON, next to the game)
+SAVE_FILE      = "savegame.json"
+HIGHSCORE_FILE = "highscores.json"
+MAX_HIGHSCORES = 10
 
 # Viewport margins
 VIEWPORT_MARGIN = 200
@@ -412,6 +431,21 @@ BOSS_FRAGMENT_DAMAGE     = 12
 BOSS_FRAGMENT_SPEED      = 6
 BOSS_FRAGMENT_LIFETIME   = 55
 
+# Volley — three boulders lobbed at staggered speeds so they land spread
+# out across the arena instead of all in one place
+BOSS_VOLLEY_COUNT = 3
+BOSS_VOLLEY_SPACING = 0.45   # fraction of throw speed between each boulder
+
+# Burrow — the boss sinks out of sight, surfaces beside the player and
+# erupts. The warning is the gap where it vanished, so the player has to
+# keep moving rather than standing and hitting it.
+BOSS_BURROW_SINK_FRAMES   = 26
+BOSS_BURROW_UNDER_FRAMES  = 30
+BOSS_BURROW_ERUPT_DAMAGE  = 28
+BOSS_BURROW_RING_COUNT    = 8
+BOSS_BURROW_RING_SPEED    = 5.5
+BOSS_BURROW_OFFSET        = 130   # how far beside the player it surfaces
+
 # The boss's phases, in order. Each activates once health drops to that
 # fraction of max ("until_health" = phase lasts while health is ABOVE it).
 #   speed            — multiplies walk/charge speed
@@ -430,11 +464,11 @@ BOSS_VARIANTS = {
         "name": "CAVE GUARDIAN",
     },
     "orange": {
-        "art": "orange", "scale": 0.62, "health": 1700,    # about 285 x 179 px
+        "art": "orange", "scale": 0.62, "health": 2600,    # about 285 x 179 px
         "name": "MOLTEN GUARDIAN",
         # Attack pools that replace the phase defaults for this boss
-        "attacks_far":  ["throw", "throw", "charge", "rain", "beam"],
-        "attacks_near": ["throw", "leap", "leap", "beam", "charge"],
+        "attacks_far":  ["throw", "volley", "charge", "rain", "beam", "burrow"],
+        "attacks_near": ["burrow", "throw", "leap", "beam", "volley", "charge"],
     },
 }
 

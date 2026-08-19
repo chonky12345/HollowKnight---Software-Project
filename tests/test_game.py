@@ -30,6 +30,7 @@ from boss_fight_view import BossFightView
 from menu import MenuView, HelpView
 from entities import Wall
 from enemy import Slime
+import progress
 
 
 INTERACT_KEY = getattr(arcade.key, DOOR_INTERACT_KEY)
@@ -536,8 +537,103 @@ def main():
     assert len(fight.projectile_list) - before == BOSS_FRAGMENT_COUNT
     check(f"a thrown boulder bursts into {BOSS_FRAGMENT_COUNT} fragments where it lands")
 
+    fight.projectile_list.clear()
+    fight.boss.next_attack = "volley"
+    fight.boss._launch_attack(player)
+    speeds = [round(x.change_x, 2) for x in fight.projectile_list]
+    assert len(speeds) == BOSS_VOLLEY_COUNT and len(set(speeds)) > 1
+    check(f"a volley throws {BOSS_VOLLEY_COUNT} boulders at different ranges")
+
+    fight.projectile_list.clear()
+    player.center_x = 400
+    fight.boss.center_x = 1200
+    fight.boss.next_attack = "burrow"
+    fight.boss._launch_attack(player)
+    assert fight.boss.state == "burrow"
+    vanished = False
+    for _ in range(BOSS_BURROW_SINK_FRAMES + BOSS_BURROW_UNDER_FRAMES + 5):
+        fight.boss.update(player, True, 0)
+        vanished = vanished or fight.boss.alpha == 0
+    assert vanished, "the boss should disappear while burrowing"
+    assert fight.boss.alpha == 255
+    assert abs(fight.boss.center_x - player.center_x) <= BOSS_BURROW_OFFSET + 5
+    assert len(fight.projectile_list) == BOSS_BURROW_RING_COUNT
+    check("burrowing hides the boss, resurfaces it beside the player and erupts")
+
     window.show_view(view)
     view.level = 1
+
+    # ── Test 7d: score, saving and high scores ──────────────────────────
+    section("Score, saving and high scores")
+    progress.delete_save()
+    view.level = 1
+    view.game_won = False
+    player.kills = 0
+    view.chests_taken = view.bosses_beaten = 0
+    view.levels_cleared = view.deaths = view.coins_spent = 0
+    assert view.score == 0
+
+    player.kills = 10
+    view.chests_taken = 2
+    earned = view.score
+    assert earned == 10 * SCORE_ENEMY_KILL + 2 * SCORE_CHEST
+    check(f"playing earns points: 10 kills and 2 chests = {earned}")
+
+    player.money = 5000
+    item_index = {item["key"]: i for i, item in enumerate(SHOP_ITEMS)}
+    before = view.score
+    dash_price = view.item_state(SHOP_ITEMS[item_index["dash"]])[2]
+    view.try_buy(item_index["dash"])
+    assert view.score == before - int(dash_price * SCORE_PER_COIN_SPENT)
+    check(f"buying an upgrade lowers the score by its price ({dash_price} points)")
+
+    before = view.score
+    view.deaths += 1
+    assert view.score == before - SCORE_DEATH_PENALTY
+    assert view.score >= 0
+    check(f"dying costs {SCORE_DEATH_PENALTY} points, and score never goes negative")
+
+    # Save, then restore into a completely separate game
+    view.load_room("crystal_caverns")
+    view.help_open = False
+    player.money = 777
+    player.has_double_jump = True
+    view.level = 2
+    view.broken_rooms.add("starting_cave")
+    view.opened_chests.add(("starter_loot_cave", (128, 368)))
+    saved_score = view.score
+    assert progress.save_game(view) and progress.has_save()
+
+    reloaded = GameView()
+    reloaded.setup()
+    assert progress.load_game(reloaded)
+    other = reloaded.player_sprite
+    assert reloaded.current_room == "crystal_caverns"
+    assert reloaded.level == 2
+    assert other.money == 777 and other.has_double_jump
+    assert other.kills == player.kills
+    assert "starting_cave" in reloaded.broken_rooms
+    assert len(reloaded.opened_chests) == 1
+    assert reloaded.score == saved_score
+    check("a saved run reloads with its room, level, upgrades, world and score")
+
+    with open(resource_path(SAVE_FILE), "w") as f:
+        f.write("{ this is not json")
+    broken = GameView()
+    broken.setup()
+    assert progress.load_game(broken) is False
+    check("a corrupted save is refused instead of crashing the game")
+    progress.delete_save()
+
+    scores = progress.load_highscores()
+    count_before = len(scores)
+    progress.add_highscore(4321, 2, 40, 5)
+    progress.add_highscore(9999, 2, 70, 0)
+    table = progress.load_highscores()
+    assert len(table) == min(MAX_HIGHSCORES, count_before + 2)
+    assert table[0]["score"] == max(e["score"] for e in table)
+    assert len(table) <= MAX_HIGHSCORES
+    check(f"high scores are stored best-first, capped at {MAX_HIGHSCORES}")
 
     # ── Test 8: menus and help ──────────────────────────────────────────
     section("Menus and help")

@@ -60,6 +60,7 @@ class Player(arcade.Sprite):
 
         # Currency
         self.money = 0
+        self.kills = 0        # counted for the score
     
     _animations = {}
 
@@ -166,6 +167,7 @@ class Player(arcade.Sprite):
                 if enemy.health <= 0:
                     reward = getattr(enemy, "reward", ENEMY_KILL_REWARD)
                     self.money += int(reward * self.coin_mult)
+                    self.kills += 1
 
     def apply_upgrade(self, key):
         """Apply one purchase of a SHOP_ITEMS entry (see constants.py)."""

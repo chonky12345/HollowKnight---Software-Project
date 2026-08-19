@@ -114,6 +114,8 @@ class Boss(Enemy):
         "rain":   (120, 180, 255),
         "beam":   (255, 160, 60),
         "throw":  (255, 110, 40),
+        "volley": (255, 80, 20),
+        "burrow": (150, 90, 200),
     }
 
     def __init__(self, x, y, projectile_list, beam_list=None,
@@ -150,6 +152,7 @@ class Boss(Enemy):
         self.hit_flash_timer = 0
         self.facing = -1
         self.repeats_left = 0     # remaining charges/slams in the combo
+        self.burrow_phase = None  # "sinking" / "under" while burrowing
         self._last_phase = 1
 
     # ────────────────────────────────────────────────────────────────────
@@ -265,7 +268,11 @@ class Boss(Enemy):
                 else:
                     self._start_recover(BOSS_RECOVER_FRAMES)
 
+        elif self.state == "burrow":
+            self._update_burrow(player)
+
         elif self.state == "stagger":
+            self.alpha = 255          # a stagger cancels a burrow mid-dig
             self.change_x = 0
             self.state_timer -= 1
             if self.state_timer <= 0:
@@ -335,6 +342,13 @@ class Boss(Enemy):
         elif self.next_attack == "throw":
             self._throw_boulder(player)
             self._start_recover(BOSS_RECOVER_FRAMES)
+
+        elif self.next_attack == "volley":
+            self._throw_volley(player)
+            self._start_recover(BOSS_RECOVER_FRAMES)
+
+        elif self.next_attack == "burrow":
+            self._start_burrow()
 
     def _launch_leap(self, player):
         self.state = "leap"
@@ -413,6 +427,71 @@ class Boss(Enemy):
         boulder.bursts = True          # the view shatters it on impact
         self.projectile_list.append(boulder)
 
+    def _throw_volley(self, player):
+        """Three boulders at staggered speeds, so they land spread across
+        the ground rather than all in one spot."""
+        direction = 1 if player.center_x > self.center_x else -1
+        distance = abs(player.center_x - self.center_x)
+        base = min(BOSS_THROW_SPEED, max(3.0, distance / 26))
+
+        for i in range(BOSS_VOLLEY_COUNT):
+            # One short, one on target, one long
+            offset = (i - (BOSS_VOLLEY_COUNT - 1) / 2) * BOSS_VOLLEY_SPACING
+            speed = max(2.0, base + offset * base)
+            boulder = BossProjectile(
+                self.center_x + direction * 30, self.center_y + 20,
+                direction * speed, BOSS_THROW_LIFT,
+                damage=BOSS_THROW_DAMAGE, radius=BOSS_THROW_RADIUS - 4,
+                color=(150, 80, 45), gravity=BOSS_THROW_GRAVITY,
+            )
+            boulder.bursts = True
+            self.projectile_list.append(boulder)
+
+    def _start_burrow(self):
+        """Sink out of sight; _update_burrow surfaces us beside the player."""
+        self.state = "burrow"
+        self.state_timer = BOSS_BURROW_SINK_FRAMES
+        self.burrow_phase = "sinking"
+        self.change_x = 0
+
+    def _update_burrow(self, player):
+        """Sink, travel unseen, then surface next to the player and erupt."""
+        self.state_timer -= 1
+        self.change_x = 0
+
+        if self.burrow_phase == "sinking":
+            # Fade out as it digs in — this is the player's cue to move
+            self.alpha = max(0, int(255 * self.state_timer / BOSS_BURROW_SINK_FRAMES))
+            if self.state_timer <= 0:
+                self.burrow_phase = "under"
+                self.state_timer = BOSS_BURROW_UNDER_FRAMES
+                self.alpha = 0
+
+        elif self.burrow_phase == "under":
+            if self.state_timer <= 0:
+                # Surface on whichever side of the player has more room
+                side = -1 if player.center_x > self.arena_width / 2 else 1
+                self.center_x = max(60, min(self.arena_width - 60,
+                                            player.center_x + side * BOSS_BURROW_OFFSET))
+                self.center_y = player.center_y + 10
+                self.facing = -side
+                self.alpha = 255
+                self._erupt()
+                self._start_recover(BOSS_RECOVER_FRAMES)
+
+    def _erupt(self):
+        """A ring of fragments thrown out of the ground as the boss surfaces."""
+        for i in range(BOSS_BURROW_RING_COUNT):
+            angle = math.pi * (i + 0.5) / BOSS_BURROW_RING_COUNT   # upward half
+            self.projectile_list.append(BossProjectile(
+                self.center_x, self.center_y,
+                math.cos(angle) * BOSS_BURROW_RING_SPEED,
+                math.sin(angle) * BOSS_BURROW_RING_SPEED,
+                damage=BOSS_BURROW_ERUPT_DAMAGE, radius=9,
+                color=(200, 120, 255), gravity=BOSS_THROW_GRAVITY,
+                lifetime=BOSS_FRAGMENT_LIFETIME,
+            ))
+
     def burst_boulder(self, boulder):
         """Replace a landed boulder with a spray of fragments."""
         for i in range(BOSS_FRAGMENT_COUNT):
@@ -466,6 +545,9 @@ class Boss(Enemy):
     PHASE_TINTS = {1: (255, 255, 255), 2: (255, 215, 210), 3: (255, 175, 165)}
 
     def _update_tint(self):
+        if self.state == "burrow":
+            return          # burrowing controls its own alpha
+
         if self.hit_flash_timer > 0:
             self.color = (255, 70, 70)
         elif self.state == "stagger":

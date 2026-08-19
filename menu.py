@@ -5,6 +5,7 @@ import arcade
 import arcade.gui
 
 from constants import resource_path, HELP_CONTROLS, HELP_TIPS
+import progress
 
 SCREEN_WIDTH = 960
 SCREEN_HEIGHT = 544
@@ -70,6 +71,28 @@ class MenuView(arcade.View):
         def on_click(event):
             self.start_game()
 
+        buttons.add(button_start)
+
+        # Only offered when there is actually a save to resume
+        if game_view is None and progress.has_save():
+            button_continue = arcade.gui.UIFlatButton(
+                text="Continue", width=250, height=56, style=BUTTON_STYLE,
+            )
+
+            @button_continue.event("on_click")
+            def on_click(event):
+                self.continue_game()
+
+            buttons.add(button_continue)
+
+        button_scores = arcade.gui.UIFlatButton(
+            text="High Scores", width=250, height=56, style=BUTTON_STYLE,
+        )
+
+        @button_scores.event("on_click")
+        def on_click(event):
+            self.window.show_view(HighScoreView(self))
+
         button_controls = arcade.gui.UIFlatButton(
             text="Controls", width=250, height=56, style=BUTTON_STYLE,
         )
@@ -86,7 +109,7 @@ class MenuView(arcade.View):
         def on_click(event):
             arcade.close_window()
 
-        buttons.add(button_start)
+        buttons.add(button_scores)
         buttons.add(button_controls)
         buttons.add(button_exit)
 
@@ -102,9 +125,20 @@ class MenuView(arcade.View):
             # Imported here (not at the top) so menu.py and game_view.py
             # can import each other without a circular-import crash
             from game_view import GameView
+            progress.delete_save()      # "Play" means a new run
             self.game_view = GameView()
             self.game_view.setup()
         self.window.show_view(self.game_view)
+
+    def continue_game(self):
+        """Pick up the saved run."""
+        from game_view import GameView
+        view = GameView()
+        view.setup()
+        if not progress.load_game(view):
+            print("No usable save — starting a new game")
+        view.help_open = False          # a returning player knows the controls
+        self.window.show_view(view)
 
     def on_show_view(self):
         self.manager.enable()
@@ -219,6 +253,56 @@ class HelpView(arcade.View):
             arcade.draw_text(f"•  {tip}", 120, y, (170, 165, 150, 230), 12)
             y -= 20
 
+        arcade.draw_text("click anywhere or press ESC to go back", cx, 26,
+                         (150, 145, 130, 200), 12, anchor_x="center")
+
+
+class HighScoreView(arcade.View):
+    """The top ten runs, best first."""
+
+    def __init__(self, return_view):
+        super().__init__()
+        self.return_view = return_view
+        self.scores = progress.load_highscores()
+
+    def on_key_press(self, key, modifiers):
+        if key in (arcade.key.ESCAPE, arcade.key.ENTER):
+            self.window.show_view(self.return_view)
+
+    def on_mouse_press(self, x, y, button, modifiers):
+        self.window.show_view(self.return_view)
+
+    def on_draw(self):
+        self.clear()
+        w, h = self.window.width, self.window.height
+        cx = w / 2
+        arcade.draw_lrbt_rectangle_filled(0, w, 0, h, (14, 12, 22, 255))
+        arcade.draw_text("HIGH SCORES", cx, h - 60, GOLD, 30,
+                         anchor_x="center", bold=True)
+
+        if not self.scores:
+            arcade.draw_text("No runs finished yet — beat level 2 to set one.",
+                             cx, h / 2, (*PARCHMENT, 200), 15,
+                             anchor_x="center")
+        else:
+            y = h - 120
+            arcade.draw_text("#", 150, y, (*PARCHMENT, 200), 13, bold=True)
+            arcade.draw_text("SCORE", 200, y, (*PARCHMENT, 200), 13, bold=True)
+            arcade.draw_text("KILLS", 330, y, (*PARCHMENT, 200), 13, bold=True)
+            arcade.draw_text("UPGRADES", 430, y, (*PARCHMENT, 200), 13, bold=True)
+            arcade.draw_text("DATE", 580, y, (*PARCHMENT, 200), 13, bold=True)
+            y -= 28
+            for i, entry in enumerate(self.scores, start=1):
+                colour = GOLD if i == 1 else (*PARCHMENT, 230)
+                arcade.draw_text(f"{i}", 150, y, colour, 14)
+                arcade.draw_text(f"{entry.get('score', 0)}", 200, y, colour, 14, bold=True)
+                arcade.draw_text(f"{entry.get('kills', 0)}", 330, y, colour, 14)
+                arcade.draw_text(f"{entry.get('upgrades', 0)}", 430, y, colour, 14)
+                arcade.draw_text(f"{entry.get('date', '')}", 580, y, colour, 14)
+                y -= 24
+
+        arcade.draw_text("fewer upgrades means a higher score", cx, 52,
+                         (170, 165, 150, 210), 12, anchor_x="center", italic=True)
         arcade.draw_text("click anywhere or press ESC to go back", cx, 26,
                          (150, 145, 130, 200), 12, anchor_x="center")
 
