@@ -6,6 +6,7 @@ from constants import *
 from player import Player
 from boss import Boss
 from maploader import load_ogmo_map
+from entities import Wall
 import game_camera
 
 
@@ -79,6 +80,16 @@ class BossFightView(arcade.View):
         self.platform_list = arena.platform_list
         W = self.arena_width = arena.width
         H = self.arena_height = arena.height
+
+        # The arena map only draws a floor — nothing stops a fighter
+        # walking off the left or right edge, or leaping over the top, so
+        # invisible boundary walls are added around the whole map. Doing
+        # this in code rather than in Ogmo means any future arena map is
+        # bounded automatically, even if its own walls are incomplete.
+        BORDER = 32
+        self.wall_list.append(Wall(-BORDER, -BORDER, BORDER, H + BORDER * 2))
+        self.wall_list.append(Wall(W, -BORDER, BORDER, H + BORDER * 2))
+        self.wall_list.append(Wall(-BORDER, H, W + BORDER * 2, BORDER))
 
         # Enter where the doorway is — the way the player walked in
         if len(arena.cave_entrance_list):

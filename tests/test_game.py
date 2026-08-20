@@ -620,8 +620,68 @@ def main():
     assert len(table) <= MAX_HIGHSCORES
     check(f"high scores are stored best-first, capped at {MAX_HIGHSCORES}")
 
+    # ── Test 7f: boss arena boundaries ──────────────────────────────────
+    section("Boss arena boundaries")
+    view.load_room("vertical_shaft")
+    view.help_open = False
+    use_door("boss_fight")
+    fight = window.current_view
+    fp = fight.player_sprite
+
+    fight.right_pressed = True
+    for _ in range(600):
+        fight.on_update(1 / 60)
+    fight.right_pressed = False
+    assert fp.center_x < fight.arena_width
+    assert fp.center_y > 0, "the player fell off the edge into the void"
+    check("running right for 10 seconds stops at the arena wall, no fall")
+
+    fp.center_x, fp.center_y = 800, 300
+    fp.change_x = fp.change_y = 0
+    fight.left_pressed = True
+    for _ in range(600):
+        fight.on_update(1 / 60)
+    fight.left_pressed = False
+    assert fp.center_x > 0 and fp.center_y > 0
+    check("running left for 10 seconds stops at the arena wall, no fall")
+
+    fp.center_x, fp.center_y = 800, 300
+    fp.change_x = fp.change_y = 0
+    fp.has_double_jump = True
+    for i in range(240):
+        if i % 20 == 0:
+            fp.change_y = PLAYER_JUMP_SPEED
+        fight.on_update(1 / 60)
+    assert fp.center_y < fight.arena_height
+    check("repeated jumping cannot clear the arena ceiling")
+
+    window.show_view(view)
+
     # ── Test 8: menus and help ──────────────────────────────────────────
     section("Menus and help")
+
+    # The main menu grows a 5th button (Continue) once a save exists.
+    # fit_buttons() must always keep the stack inside the fixed band
+    # between the subtitle and the footer, for any button count that
+    # occurs in the game (3 to 5 today).
+    from menu import fit_buttons, BUTTON_BAND_TOP, BUTTON_BAND_BOTTOM
+    band_height = BUTTON_BAND_TOP - BUTTON_BAND_BOTTOM
+    for n in (3, 4, 5):
+        height, gap = fit_buttons(n)
+        total = n * height + (n - 1) * gap
+        assert total <= band_height, (n, total, band_height)
+    height4, _ = fit_buttons(4)
+    height5, _ = fit_buttons(5)
+    assert height4 == 56, "4 buttons should still use full size"
+    assert height5 < height4, "5 buttons must shrink to keep fitting"
+    check("the button layout always fits its band, however many buttons")
+
+    progress.save_game(view)
+    assert progress.has_save()
+    menu_with_continue = MenuView()
+    assert menu_with_continue.manager is not None    # builds without error
+    check("the menu with Continue present builds successfully")
+    progress.delete_save()
     view.on_key_press(arcade.key.ESCAPE, 0)
     pause = window.current_view
     assert isinstance(pause, MenuView) and pause.game_view is view

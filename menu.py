@@ -32,10 +32,33 @@ BUTTON_STYLE = {
 }
 
 
+# Vertical band the button stack must fit inside: between the subtitle
+# divider and the footer hint. Shared by MenuView and the test suite.
+BUTTON_BAND_TOP = 338
+BUTTON_BAND_BOTTOM = 40
+
+
+def fit_buttons(n, width=250, max_height=56, max_gap=18, min_height=40, min_gap=8):
+    """Button (height, gap) that fits n buttons inside BUTTON_BAND.
+
+    Extracted as a standalone function so it can be tested without
+    touching arcade.gui internals: the number of buttons was already
+    correct, but a fixed size meant a 5th button (Continue, once a save
+    exists) grew the stack past the subtitle above and the footer below.
+    """
+    band_height = BUTTON_BAND_TOP - BUTTON_BAND_BOTTOM
+    height, gap = max_height, max_gap
+    while n * height + (n - 1) * gap > band_height and height > min_height:
+        height -= 2
+        gap = max(min_gap, gap - 2)
+    return height, gap
+
+
 class MenuView(arcade.View):
-    """Doubles as the main menu and the pause menu: MenuView() — main menu
-    ("Play" starts a fresh game) MenuView(game_view=view) — pause menu
-    ("Resume"…
+    """
+    Doubles as the main menu and the pause menu:
+      MenuView()                — main menu ("Play" starts a fresh game)
+      MenuView(game_view=view)  — pause menu ("Resume" returns to the game)
     """
 
     def __init__(self, game_view=None):
@@ -58,62 +81,33 @@ class MenuView(arcade.View):
 
         self.manager = arcade.gui.UIManager()
 
-        buttons = arcade.gui.UIBoxLayout(space_between=18)
-
-        button_start = arcade.gui.UIFlatButton(
-            text="Resume" if game_view else "Play",
-            width=250, height=56, style=BUTTON_STYLE,
-        )
-
-        @button_start.event("on_click")
-        def on_click(event):
-            self.start_game()
-
-        buttons.add(button_start)
-
-        # Only offered when there is actually a save to resume
+        # What buttons to show, decided before anything is drawn — Continue
+        # only appears on the main menu, and only once a save exists
+        specs = [("Resume" if game_view else "Play", self.start_game)]
         if game_view is None and progress.has_save():
-            button_continue = arcade.gui.UIFlatButton(
-                text="Continue", width=250, height=56, style=BUTTON_STYLE,
-            )
+            specs.append(("Continue", self.continue_game))
+        specs.append(("High Scores", lambda: self.window.show_view(HighScoreView(self))))
+        specs.append(("Controls", lambda: self.window.show_view(HelpView(self))))
+        specs.append(("Exit", arcade.close_window))
 
-            @button_continue.event("on_click")
-            def on_click(event):
-                self.continue_game()
+        btn_w = 250
+        btn_h, gap = fit_buttons(len(specs), width=btn_w)
 
-            buttons.add(button_continue)
+        buttons = arcade.gui.UIBoxLayout(space_between=gap)
+        for text, callback in specs:
+            button = arcade.gui.UIFlatButton(
+                text=text, width=btn_w, height=btn_h, style=BUTTON_STYLE)
 
-        button_scores = arcade.gui.UIFlatButton(
-            text="High Scores", width=250, height=56, style=BUTTON_STYLE,
-        )
+            @button.event("on_click")
+            def on_click(event, callback=callback):
+                callback()
 
-        @button_scores.event("on_click")
-        def on_click(event):
-            self.window.show_view(HighScoreView(self))
-
-        button_controls = arcade.gui.UIFlatButton(
-            text="Controls", width=250, height=56, style=BUTTON_STYLE,
-        )
-
-        @button_controls.event("on_click")
-        def on_click(event):
-            self.window.show_view(HelpView(self))
-
-        button_exit = arcade.gui.UIFlatButton(
-            text="Exit", width=250, height=56, style=BUTTON_STYLE,
-        )
-
-        @button_exit.event("on_click")
-        def on_click(event):
-            arcade.close_window()
-
-        buttons.add(button_scores)
-        buttons.add(button_controls)
-        buttons.add(button_exit)
+            buttons.add(button)
 
         anchor = arcade.gui.UIAnchorLayout()
+        band_mid = (BUTTON_BAND_TOP + BUTTON_BAND_BOTTOM) / 2
         anchor.add(child=buttons, anchor_x="center", anchor_y="center",
-                   align_y=-70)
+                   align_y=band_mid - SCREEN_HEIGHT / 2)
         self.manager.add(anchor)
 
     # ────────────────────────────────────────────────────────────────────
