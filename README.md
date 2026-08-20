@@ -48,7 +48,7 @@ own for testing with `python boss_main.py`.
 
 The full project documentation is kept as a Google Doc:
 
-**[Metroidvania — Project Documentation](https://docs.google.com/document/d/1MSHSOlnhMYu9t-XXZAtd2o0wX_3CsIJ4Y_ZD5im3aLI/edit)**
+**[Metroidvania — Project Documentation](https://docs.google.com/document/d/1wG1AogpNEJ9zElHUkTdbMbW4vniABBYQ8vYOX144p84/edit)**
 
 | Section | Contents |
 |---|---|
