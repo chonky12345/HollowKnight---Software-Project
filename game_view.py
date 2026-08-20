@@ -1,5 +1,4 @@
 import arcade
-import json
 import math
 import random
 
